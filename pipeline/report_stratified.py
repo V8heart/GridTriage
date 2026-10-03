@@ -82,18 +82,38 @@ def stratified_report(frame: pd.DataFrame, *, input_scope: str = "all_windows") 
 
     work = frame.copy()
     work["is_candidate"] = work["is_candidate"].astype(str).str.lower().isin({"true", "1"})
-    if "gt_params_json" in work.columns and "period_actual_s" not in work.columns:
-        periods = []
-        for raw in work["gt_params_json"].tolist():
-            period = None
+    if "gt_params_json" in work.columns:
+        periods = [] if "period_actual_s" not in work.columns else None
+        floored: list[bool] = []
+        matrices: list = []
+        variants = (
+            list(work["gt_variant"].astype(str))
+            if "gt_variant" in work.columns
+            else [None] * len(work)
+        )
+        for index, raw in enumerate(work["gt_params_json"].tolist()):
+            payload = {}
             if isinstance(raw, str) and raw.strip():
                 try:
                     payload = json.loads(raw)
                 except json.JSONDecodeError:
                     payload = {}
-                period = payload.get("period_actual_s", payload.get("period_requested_s"))
-            periods.append(period)
-        work["period_actual_s"] = periods
+            elif isinstance(raw, dict):
+                payload = raw
+            if periods is not None:
+                periods.append(payload.get("period_actual_s", payload.get("period_requested_s")))
+            is_floored = bool(payload.get("period_floored"))
+            floored.append(is_floored)
+            matrices.append(payload.get("matrix_size"))
+            if is_floored and variants[index] in {"swma_mimicry", "mimicry"}:
+                # Floor destroyed the host-matched period; do not score as mimicry.
+                variants[index] = "swma_floored"
+        if periods is not None:
+            work["period_actual_s"] = periods
+        work["period_floored"] = floored
+        work["matrix_size"] = matrices
+        if "gt_variant" in work.columns:
+            work["gt_variant"] = variants
     views = {
         "primary_target_only": _scope(work, target_only=True, include_warmup=False),
         "secondary_companion_inclusive": _scope(work, target_only=False, include_warmup=False),
@@ -105,6 +125,8 @@ def stratified_report(frame: pd.DataFrame, *, input_scope: str = "all_windows") 
         "progress_log": "progress_log",
         "gt_variant": "gt_variant",
         "period_actual_s": "period_actual_s",
+        "period_floored": "period_floored",
+        "matrix_size": "matrix_size",
     }
     rows = []
     for view_name, view in views.items():

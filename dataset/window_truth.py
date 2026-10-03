@@ -30,27 +30,37 @@ def parse_intervals(raw) -> list[Interval]:
     return out
 
 
-def merge_intervals(intervals: Sequence[Interval]) -> list[Interval]:
+# Recorded intervals are the attack's *active* bursts: SWMA logs each active
+# half-cycle (passive gaps up to ~2 s at a 4 s period) and LTMA logs each
+# ~1 ms aux injection once per host step (~0.4 s). The attack is running
+# across those gaps, so windows are labeled against bursts bridged over gaps
+# up to this length. LTMA's 30 s no-injection phases stay host-normal.
+ATTACK_GAP_BRIDGE_S = 5.0
+
+
+def merge_intervals(intervals: Sequence[Interval], max_gap: float = 0.0) -> list[Interval]:
     if not intervals:
         return []
     ordered = sorted((float(a), float(b)) for a, b in intervals)
     merged = [ordered[0]]
     for start, end in ordered[1:]:
         last_start, last_end = merged[-1]
-        if start <= last_end:
+        if start <= last_end + max_gap:
             merged[-1] = (last_start, max(last_end, end))
         else:
             merged.append((start, end))
     return merged
 
 
-def interval_overlap_seconds(window: Interval, intervals: Sequence[Interval]) -> float:
+def interval_overlap_seconds(
+    window: Interval, intervals: Sequence[Interval], max_gap: float = 0.0
+) -> float:
     """Union overlap between window and intervals (no double-count)."""
     w0, w1 = float(window[0]), float(window[1])
     if w1 <= w0:
         return 0.0
     total = 0.0
-    for start, end in merge_intervals(intervals):
+    for start, end in merge_intervals(intervals, max_gap):
         lo = max(w0, start)
         hi = min(w1, end)
         if hi > lo:
@@ -64,13 +74,14 @@ def window_is_attack(
     intervals: Sequence[Interval] | None,
     *,
     threshold: float = 0.5,
+    max_gap: float = ATTACK_GAP_BRIDGE_S,
 ) -> bool:
     duration = float(window_end_epoch) - float(window_start_epoch)
     if duration <= 0:
         return False
     if not intervals:
         return False
-    overlap = interval_overlap_seconds((window_start_epoch, window_end_epoch), intervals)
+    overlap = interval_overlap_seconds((window_start_epoch, window_end_epoch), intervals, max_gap)
     return (overlap / duration) >= threshold
 
 

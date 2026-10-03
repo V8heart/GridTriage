@@ -177,3 +177,29 @@ def test_collector_instant_unsupported_and_temp_abort(tmp_path: Path):
     assert stop.exists()
     rows = list(csv.DictReader(output.open(encoding="utf-8")))
     assert all(r["power_instant_w"] == "" for r in rows)
+
+
+def test_field_value_reads_union_member_by_value_type():
+    import ctypes
+
+    class Value(ctypes.Union):
+        _fields_ = [
+            ("dVal", ctypes.c_double),
+            ("uiVal", ctypes.c_uint),
+            ("ulVal", ctypes.c_ulong),
+            ("ullVal", ctypes.c_ulonglong),
+        ]
+
+    class Field:
+        nvmlReturn = 0
+        valueType = 1
+
+    field = Field()
+    field.value = Value()
+    field.value.uiVal = 331596
+    # dVal on the same bits is a denormal; the old reader returned this.
+    assert field.value.dVal < 1e-300
+    assert ct.field_value_to_float(field) == 331596.0
+
+    field.nvmlReturn = 3
+    assert ct.field_value_to_float(field) is None

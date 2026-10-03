@@ -90,6 +90,35 @@ def _process_name(pid: int) -> str | None:
     return None
 
 
+# nvmlValueType_t -> nvmlValue_t union member. The union always exposes every
+# member, so the member must be chosen by valueType (reading dVal on an integer
+# field reinterprets milliwatt bits as a denormal double).
+_NVML_VALUE_MEMBERS = {
+    0: "dVal",
+    1: "uiVal",
+    2: "ulVal",
+    3: "ullVal",
+    4: "sllVal",
+    5: "siVal",
+    6: "usVal",
+}
+
+
+def field_value_to_float(field: Any) -> float | None:
+    """Return an nvmlFieldValue_t's value as a float, or None on error."""
+    if int(getattr(field, "nvmlReturn", 0)) != 0:
+        return None
+    raw = getattr(field, "value", None)
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    member = _NVML_VALUE_MEMBERS.get(int(getattr(field, "valueType", 1)))
+    if member is None or not hasattr(raw, member):
+        return None
+    return float(getattr(raw, member))
+
+
 class NvmlBackend:
     """Thin pynvml wrapper so unit tests can inject a fake backend."""
 
@@ -189,17 +218,8 @@ class NvmlBackend:
 
             def _instant():
                 values = nvml.nvmlDeviceGetFieldValues(handle, [field_id])
-                raw = getattr(values[0], "value", None)
-                # Field value is typically milliwatts in value.ullVal / uiVal.
-                if raw is None:
-                    return None
-                for attr in ("dVal", "ullVal", "uiVal", "ull_val"):
-                    if hasattr(raw, attr):
-                        val = getattr(raw, attr)
-                        return float(val) / 1000.0 if attr != "dVal" else float(val)
-                if isinstance(raw, (int, float)):
-                    return float(raw) / 1000.0
-                return None
+                milliwatts = field_value_to_float(values[0])
+                return None if milliwatts is None else milliwatts / 1000.0
 
             power_instant = self._safe(_instant, errors, "power_instant_w")
 

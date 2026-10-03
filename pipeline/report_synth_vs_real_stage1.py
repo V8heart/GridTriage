@@ -216,9 +216,35 @@ def run(args) -> dict:
         f"real fallback_counts: `{report['real_fallback_counts']}`",
         f"real idle gated / undeclared_load: {report['real']['idle_gated']} / {report['real']['undeclared_load']}",
         "",
+        "alpha_high_impact = alpha (impact relaxation off)",
+        "",
+        "## attack disguise cohort (declared_job_type x recall, target)",
+        "",
+        * _md_table(
+            ["declared_job_type", "n", "candidate rate"],
+            [
+                [str(job), str(int(n)), f"{rate:.3f}"]
+                for job, n, rate in _disguise_rows(real)
+            ],
+        ),
+        "",
     ]
+    args.out_json.parent.mkdir(parents=True, exist_ok=True)
+    args.out_json.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     args.out_md.write_text("\n".join(md) + "\n", encoding="utf-8")
     return report
+
+
+def _disguise_rows(frame: pd.DataFrame) -> list[tuple[str, int, float]]:
+    attack = frame[~frame["gt_label"].astype(str).str.startswith("normal")]
+    if "gpu_role" in attack.columns:
+        attack = attack[attack["gpu_role"].astype(str) == "target"]
+    if attack.empty or "declared_job_type" not in attack.columns:
+        return []
+    rows = []
+    for job, group in attack.groupby(attack["declared_job_type"].astype(str)):
+        rows.append((str(job), int(len(group)), float(group["is_candidate"].mean())))
+    return rows
 
 
 def main() -> None:

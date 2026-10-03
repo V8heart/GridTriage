@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from dataset.window_truth import label_window, parse_intervals
-from pipeline.baseline import CohortBaseline, FEATURES_V2
+from pipeline.baseline import CohortBaseline
 from pipeline.changepoint import cusum_changepoints
 from pipeline.attack_visibility import attack_visibility_group, parse_period_s
 from pipeline.context_evidence import (
@@ -68,6 +68,13 @@ DEFAULT_CONFIG = {
     "stage2": {
         "evidence_rate_min": 0.6,
         "drop_progress_log_missing": False,
+        "log_period": {
+            "min_step_period_s": 1.0,
+            "freq_min_hz": 0.05,
+            "freq_max_hz": 0.70,
+            "harmonics": (1.0, 2.0),
+            "rel_tol": 0.10,
+        },
     },
 }
 
@@ -85,7 +92,23 @@ SUSPICIOUS_EVIDENCE_KEYS = (
     "util_power_decoupled",
     "declared_family_mismatch",
     "strong_peak",
+    "inst_power_unsteady",
 )
+
+
+def score_features(baseline: CohortBaseline, config: dict) -> set[str]:
+    """Baseline features that enter the tail-min u-score.
+
+    ``evidence_only_features`` keep cohort stats (for robust z) but reach the
+    score only through bool evidence, so a single feature cannot dominate it.
+    """
+    return set(baseline.features) - set(config.get("evidence_only_features") or [])
+
+
+def instant_evidence_stats(z: dict) -> dict:
+    """Cohort robust z of instant-power step size, for inst_power_unsteady."""
+    value = z.get("inst_step_mad_w")
+    return {"inst_step_z": float(value)} if value is not None else {}
 
 
 def load_config(path: str | Path | None = None) -> dict:
@@ -233,18 +256,60 @@ def flatten_features(feats: dict) -> dict:
     return out
 
 
+def instant_power_features(subset: pd.DataFrame) -> dict:
+    """Window features from NVML instant power (less smoothed than power_w).
+
+    power_w is a ~1 s average, so sub-second load changes (LTMA aux bursts,
+    1 s SWMA) are flattened; instant power keeps them up to the ~2 Hz refresh.
+    Returns {} when the column is absent (synthetic data) so robust_z skips it.
+    """
+    if "power_instant_w" not in subset:
+        return {}
+    values = pd.to_numeric(subset["power_instant_w"], errors="coerce").to_numpy(dtype=float)
+    values = values[np.isfinite(values) & (values > 0)]
+    if len(values) < 8:
+        return {}
+    steps = np.abs(np.diff(values))
+    # Rows between NVML refreshes repeat the same value; only real updates count.
+    steps = steps[steps > 0]
+    return {
+        "inst_swing_abs_w": float(np.percentile(values, 90) - np.percentile(values, 10)),
+        "inst_step_mad_w": float(np.median(steps)) if len(steps) else 0.0,
+    }
+
+
 def conformal_pvalue(score: float, calibration_scores: list[float]) -> float:
     values = np.asarray(calibration_scores, dtype=float)
     values = values[np.isfinite(values)]
     return float((1 + np.sum(values >= score)) / (len(values) + 1)) if len(values) else 1.0
 
 
-def empirical_tail_p(value: float, reference: list[float] | np.ndarray) -> float:
+def empirical_tail_p(
+    value: float,
+    reference: list[float] | np.ndarray,
+    *,
+    extrapolate: bool = False,
+) -> float:
+    """Right-tail p of value among reference |z| values.
+
+    The empirical p bottoms out at 1/(n+1), so every value past the largest
+    reference scores the same. With ``extrapolate`` an exponential tail fitted
+    to the top exceedances keeps ranking those values by how far out they are.
+    """
     values = np.asarray(reference, dtype=float)
     values = values[np.isfinite(values)]
     if len(values) == 0:
         return 1.0
-    return float((1 + np.sum(values >= float(value))) / (len(values) + 1))
+    n = len(values)
+    p = float((1 + np.sum(values >= float(value))) / (n + 1))
+    if not extrapolate or n < 20 or float(value) <= float(values.max()):
+        return p
+    k = max(5, int(0.05 * n))
+    ordered = np.sort(values)
+    threshold = float(ordered[-k - 1])
+    scale = max(float(np.mean(ordered[-k:] - threshold)), 1e-6)
+    tail = (k / (n + 1)) * float(np.exp(-(float(value) - threshold) / scale))
+    return min(p, tail)
 
 
 def impact_level(impact_raw: float, quantiles: dict | None) -> str:
@@ -409,7 +474,9 @@ def combine_u_score(
             best_i = min(range(len(arr)), key=lambda i: abs(arr[i] - target))
             arr.pop(best_i)
             refs = arr
-        feature_ps[feature] = empirical_tail_p(abs_z, refs)
+        feature_ps[feature] = empirical_tail_p(
+            abs_z, refs, extrapolate=config.get("tail_extrapolation") == "exponential"
+        )
         levels.append(level)
     if feature_ps:
         min_p = min(feature_ps.values())
@@ -461,10 +528,12 @@ def score_window(
 ) -> dict:
     require_calibration_schema(calibration)
     z = baseline.robust_z(row)
-    z_values = {k: abs(v) for k, v in z.items() if k != "baseline_level" and k in FEATURES_V2}
+    scored = score_features(baseline, config)
+    z_values = {k: abs(v) for k, v in z.items() if k != "baseline_level" and k in scored}
     raw_evidence = dict(row.get("evidence", {}))
     family_stats = baseline.declared_family_mismatch_stats(row)
     raw_evidence.update({k: v for k, v in family_stats.items() if v is not None})
+    raw_evidence.update(instant_evidence_stats(z))
     merged = strip_recompute_bools({**row, **raw_evidence})
     bool_evidence = to_bool_evidence(merged, config)
     include_evidence = profile != "no_evidence"
@@ -573,6 +642,7 @@ def build_windows(
                 util_min_range_pct=float(config.get("util_min_range_pct", 5.0)),
             )
             flat = flatten_features(feats)
+            flat.update(instant_power_features(subset))
             cps = cusum_changepoints(subset["power_w"].to_numpy(), sample_hz=hz)
             step_period, n_steps, step_cv = step_period_from_log(events, t0, t1, gpu_id=int(gpu_id))
             matched = period_match(float(flat.get("dominant_freq_hz", 0.0)), step_period)
@@ -659,7 +729,7 @@ def build_windows(
     windows = pd.DataFrame(rows)
     if windows.empty:
         return windows
-    windows = _attach_session_sync(windows, df)
+    windows = _attach_session_sync(windows, df, config)
     windows = fill_session_observed_n_procs(windows)
     if config.get("cohort_expected_band") and "declared_job_type" in windows.columns:
         from dataset.declared_context import apply_expected_band_column
@@ -672,10 +742,30 @@ def build_windows(
     return windows
 
 
-def _attach_session_sync(windows: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
+def _idle_gpu_ids(session_df: pd.DataFrame, t0: float, t1: float, config: dict) -> set[int]:
+    """Observe-only idle GPUs in [t0, t1]. Does not use gpu_role."""
+    ids: set[int] = set()
+    if "timestamp" not in session_df.columns:
+        return ids
+    for gpu, group in session_df.groupby("gpu_id"):
+        win = group[(group["timestamp"] >= t0) & (group["timestamp"] <= t1)]
+        if win.empty:
+            continue
+        n_procs = median_observed_n_procs(win) if "observed_n_procs" in win.columns else None
+        mean_w = None
+        if "power_w" in win.columns:
+            mean_w = float(pd.to_numeric(win["power_w"], errors="coerce").mean())
+        idle = idle_gate_decision({"observed_n_procs": n_procs, "mean_w": mean_w}, config)
+        if idle and idle.get("idle_status") == "idle":
+            ids.add(int(gpu))
+    return ids
+
+
+def _attach_session_sync(windows: pd.DataFrame, df: pd.DataFrame, config: dict | None = None) -> pd.DataFrame:
     """Fill multi_gpu / cross_job sync indices for same-session windows only."""
     if "session_id" not in windows.columns or "window_start_s" not in windows.columns:
         return windows
+    cfg = config or {}
     out = windows.copy()
     for session_id, session_windows in out.groupby("session_id", sort=False):
         session_df = df[df["session_id"].astype(str) == str(session_id)]
@@ -683,7 +773,12 @@ def _attach_session_sync(windows: pd.DataFrame, df: pd.DataFrame) -> pd.DataFram
             continue
         # Unique time windows within the session (shared across GPUs).
         for (t0, t1), _ in session_windows.groupby(["window_start_s", "window_end_s"], sort=False):
+            # Stage1 scoring keeps all pairs (calibration still weights cross_job_sync).
             metrics = session_window_sync_metrics(session_df, float(t0), float(t1))
+            idle_gpus = _idle_gpu_ids(session_df, float(t0), float(t1), cfg)
+            visible = session_window_sync_metrics(
+                session_df, float(t0), float(t1), exclude_gpu_ids=idle_gpus
+            )
             mask = (
                 (out["session_id"].astype(str) == str(session_id))
                 & (out["window_start_s"] == float(t0))
@@ -702,7 +797,9 @@ def _attach_session_sync(windows: pd.DataFrame, df: pd.DataFrame) -> pd.DataFram
                 evidence = dict(out.at[idx, "evidence"] or {})
                 evidence["multi_gpu_sync_index"] = float(metrics["multi_gpu_sync_index"])
                 evidence["cross_job_sync_index"] = float(metrics["cross_job_sync_index"])
+                evidence["cross_job_sync_index_noidle"] = float(visible["cross_job_sync_index"])
                 out.at[idx, "evidence"] = evidence
                 out.at[idx, "cross_job_sync_index"] = float(metrics["cross_job_sync_index"])
                 out.at[idx, "multi_gpu_sync_index"] = float(metrics["multi_gpu_sync_index"])
+                out.at[idx, "cross_job_sync_index_noidle"] = float(visible["cross_job_sync_index"])
     return out

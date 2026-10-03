@@ -25,3 +25,7 @@ dataset/synthetic/attacks/syn-*.csv
 dataset/synthetic/steps/
 dataset/synthetic/sessions/
 dataset/synthetic/all_v3.csv
+
+# MITRE ATT&CK / ATLAS source dumps and built search indexes (rebuild with pipeline/kb)
+dataset/kb/raw/
+dataset/kb/index/

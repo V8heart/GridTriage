@@ -1,0 +1,13 @@
+# Real misuse attacks for classes that only had threat cards (plan_rag_pipeline_v4.md §5).
+--workload llmjacking --seed 311
+--workload hidden_ml_training --seed 321
+--workload sponge --seed 331
+--workload burst_ramp --seed 341
+--workload llmjacking --seed 312
+--workload hidden_ml_training --seed 322
+--workload sponge --seed 332
+--workload burst_ramp --seed 342
+--workload llmjacking --seed 313
+--workload hidden_ml_training --seed 323
+--workload sponge --seed 333
+--workload burst_ramp --seed 343

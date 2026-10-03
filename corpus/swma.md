@@ -3,18 +3,18 @@ threat_id: T-SWMA-001
 category: cyber_physical_attack
 mitre_technique: null
 evidence:
-  - name: period_mismatch
+  - name: log_period_mismatch
     necessity: required
-    description: "전력 지배 주기가 진행 로그 step 주기와 불일치"
-  - name: strong_peak
-    necessity: required
-    description: "규칙적 on/off가 스펙트럼에 뚜렷한 peak로 남음"
-  - name: period_match
-    necessity: exclusion
-    description: "로그 주기와 일치하면 정상 학습 위상으로 배제"
-  - name: progress_log_missing
+    description: "비교 가능한 느린 스텝에서 전력 주기와 로그 스텝이 1×/2×로 맞지 않음"
+  - name: period_comparable
     necessity: supporting
-    description: "위장 커널은 training progress log가 빈약한 경우가 많음"
+    description: "스텝이 빨라 비교 불가면 주기 불일치를 주장하지 않음"
+  - name: flat_power
+    necessity: exclusion
+    description: "거의 평탄한 고부하는 SWMA 사각파가 아님"
+  - name: cross_job_sync
+    necessity: exclusion
+    description: "여러 작업이 맞춰 움직이면 coordinated 문서다"
 benign_lookalikes: []
 grid_relevance:
   mechanism: electromechanical_oscillation
@@ -24,6 +24,9 @@ observability:
   min_sample_hz: 1
   notes: "NVML 1초 평균을 전제로 해석"
 thresholds_provenance: dataset/eval/evidence_thresholds.json
+attack_ids: ["T1496.001"]
+profile: {form: [square], level: [mid, high], log: [mismatch, na], multi_gpu: single, timescale: [
+    seconds]}
 ---
 # SWMA (Synthetic Workload Modulation Attack)
 
@@ -48,9 +51,18 @@ unified-memory control flag로 두 모드를 정밀한 스케줄에 따라 전�
 - 정상 학습의 data-loading/compute 위상 전환보다 훨씬 규칙적이고 기계적임.
 
 ## 정상 워크로드와의 구분 포인트
-- 정상 대규모 학습도 compute/communication 위상 전환으로 전력이 출렁이지만, 그 주기는
-  배치 처리·동기화에 종속되어 불규칙하고 맥락(모델 크기, 배치)으로 설명 가능하다.
-- SWMA는 "기계적으로 규칙적인 on/off"가 핵심 차별점.
+- 조서 `pattern`이 창 중앙값 기준으로 사각파(규칙적 duty, 뚜렷한 swing, 분당 전환)를 보일 때만 SWMA를 주장한다.
+- `period_comparable`이 참일 때만 로그 스텝과 전력 주기를 비교한다. 서브초 스텝(정상 학습, host-inherited SWMA)은 비교 불가다.
+- 비교 가능하면 `log_period_mismatch`만 주기 불일치로 쓴다. Stage1 `period_mismatch`는 `strong_peak` 뒤에 가려져 있어 이 문서의 필수가 아니다.
+- decoy 스텝이 우연히 맞을 수 있으므로 `period_match`만으로 배제하지 않는다.
+- `cross_job_sync`가 켜지면 이 문서가 아니라 coordinated 문서다.
 
 ## Evidence 근거 (초안)
 Bit2Watt SWMA: 별도 CUDA 커널의 규칙적 active/passive 전환
+
+## 관측 시그니처
+(DRAFT, 사람 승인 전)
+- 전력 사각파 반복 (power square wave), 규칙적인 high/low 전환 (regular duty cycle).
+- 주기 0.5–4초 (period 0.5–4 s), 큰 전력 진폭 swing 수백 W (large power swing).
+- 뚜렷한 스펙트럼 첨두 (strong spectral peak), 진행 로그 스텝과 전력 주기 불일치 (log period mismatch).
+- 평탄한 고부하가 아니다. 여러 GPU 동시 동기화면 coordinated 문서를 본다.

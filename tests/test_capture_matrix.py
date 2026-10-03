@@ -295,6 +295,39 @@ def test_execute_captures_continues_after_a_failed_cell(tmp_path):
     assert json.loads(lines[0])["capture_key"] == "c-fail"
 
 
+def test_execute_captures_continues_after_runner_exception(tmp_path):
+    import subprocess
+
+    remaining = [
+        {"capture_key": "c-boom", "workload": "resnet_ddp", "duration_s": 480, "gpu_id": 0},
+        {"capture_key": "c-ok", "workload": "baseline", "duration_s": 480, "gpu_id": 0},
+    ]
+    seen = []
+
+    def runner(item):
+        seen.append(item["capture_key"])
+        if item["capture_key"] == "c-boom":
+            raise RuntimeError("interrupted")
+        return subprocess.CompletedProcess(args=["x"], returncode=0)
+
+    failures = execute_captures(
+        remaining,
+        runner=runner,
+        cooldown_fn=lambda *a, **k: None,
+        cooldown_cfg={
+            "min_seconds": 0,
+            "max_wait_seconds": 0,
+            "idle_temp_c": None,
+            "idle_temp_delta_c": 3,
+            "poll_seconds": 1,
+        },
+        failures_path=tmp_path / "failures.jsonl",
+    )
+    assert seen == ["c-boom", "c-ok"]
+    assert failures[0]["capture_key"] == "c-boom"
+    assert "interrupted" in failures[0]["error"]
+
+
 def test_cleanup_incomplete_capture_only_touches_matching_key(tmp_path):
     staging = tmp_path / "dataset" / "real" / ".staging" / "s-deadbeefdeadbeef"
     staging.mkdir(parents=True)

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from dataset.recover_instant_power import recover_power_instant
+
 ROOT = Path(__file__).resolve().parent.parent
 
 KEEP = [
@@ -16,6 +18,7 @@ KEEP = [
     "gpu_model",
     "sample_hz",
     "power_w",
+    "power_instant_w",
     "util_gpu_pct",
     "fb_used_mb",
     "observed_n_procs",
@@ -47,7 +50,10 @@ def concat_sessions(
             continue
         frame = pd.read_csv(path, low_memory=False)
         cols = [c for c in KEEP if c in frame.columns]
-        frames.append(frame[cols])
+        frame = frame[cols].copy()
+        if "power_instant_w" in frame.columns:
+            frame["power_instant_w"] = recover_power_instant(frame["power_instant_w"])
+        frames.append(frame)
     if not frames:
         raise FileNotFoundError(f"no session telemetry under {sessions_root}")
     out = pd.concat(frames, ignore_index=True)

@@ -183,3 +183,13 @@ def test_validate_rejects_leaky_session_id():
     result = validate_session_dir(Path("/tmp/does-not-matter"))
     # missing files -> invalid
     assert result.valid is False
+
+
+def test_sparse_attack_bursts_label_as_attack():
+    # LTMA: ~1 ms injection every 0.4 s; SWMA: 1 s active, 1 s passive.
+    ltma = [(t, t + 0.001) for t in [i * 0.4 for i in range(75)]]
+    swma = [(float(t), t + 1.0) for t in range(0, 30, 2)]
+    assert window_is_attack(0.0, 30.0, ltma) is True
+    assert window_is_attack(0.0, 30.0, swma) is True
+    # A 30 s pause with no injection is not bridged.
+    assert window_is_attack(31.0, 61.0, ltma + [(65.0, 65.001)]) is False

@@ -107,6 +107,7 @@ def read_session_progress(
         relative = event_time_s(item, t0_epoch=t0_epoch)
         if relative is not None:
             item["t"] = relative
+            item.pop("t_epoch", None)
         elif item.get("t_epoch") is not None:
             # An epoch event without a session origin cannot safely be compared.
             item.pop("t", None)

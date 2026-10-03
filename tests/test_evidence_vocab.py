@@ -23,6 +23,8 @@ def test_forbidden_feature_range_match_not_allowed():
 def test_new_vocab_names_present():
     assert "util_power_decoupled" in ALLOWED_EVIDENCE_NAMES
     assert "declared_family_mismatch" in ALLOWED_EVIDENCE_NAMES
+    assert "log_period_mismatch" in ALLOWED_EVIDENCE_NAMES
+    assert "period_comparable" in ALLOWED_EVIDENCE_NAMES
 
 
 def test_to_bool_evidence_uses_thresholds():
@@ -144,3 +146,58 @@ def test_invalid_mechanism_rejected(tmp_path):
 
 def test_corpus_docs_validate():
     assert validate_all_corpus_docs(CORPUS_DIR) == []
+
+
+def test_short_step_not_period_comparable():
+    out = to_bool_evidence(
+        {
+            "step_period_s": 0.2,
+            "dominant_freq_hz": 0.23,
+            "period_match": False,
+            "dominant_peak_prominence_log": 1.0,
+        }
+    )
+    assert out["period_comparable"] is False
+    assert out["log_period_mismatch"] is False
+    assert out["period_mismatch"] is False
+
+
+def test_log_period_mismatch_uses_tight_harmonics():
+    mismatch = to_bool_evidence(
+        {
+            "step_period_s": 3.0,
+            "dominant_freq_hz": 0.23,
+            "period_match": False,
+            "dominant_peak_prominence_log": 1.0,
+        }
+    )
+    assert mismatch["period_comparable"] is True
+    assert mismatch["log_period_mismatch"] is True
+    matched = to_bool_evidence(
+        {
+            "step_period_s": 4.0,
+            "dominant_freq_hz": 0.25,
+            "period_match": False,
+            "dominant_peak_prominence_log": 1.0,
+        }
+    )
+    assert matched["period_comparable"] is True
+    assert matched["log_period_mismatch"] is False
+
+
+def test_log_period_bits_do_not_enter_u_score():
+    from pipeline.evidence_vocab import SCORE_RECOMPUTE_BOOL_KEYS
+    from pipeline.stage1_v2 import SUSPICIOUS_EVIDENCE_KEYS, _active_evidence_keys
+
+    assert "log_period_mismatch" not in SUSPICIOUS_EVIDENCE_KEYS
+    assert "period_comparable" not in SUSPICIOUS_EVIDENCE_KEYS
+    assert "log_period_mismatch" not in SCORE_RECOMPUTE_BOOL_KEYS
+    weights = {key: 1.0 for key in SUSPICIOUS_EVIDENCE_KEYS}
+    weights["log_period_mismatch"] = 99.0
+    active = _active_evidence_keys(
+        {"log_period_mismatch": True, "period_comparable": True, "period_mismatch": False},
+        {},
+        weights,
+        progress_log_allowed=True,
+    )
+    assert active == []

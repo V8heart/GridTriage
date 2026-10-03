@@ -84,6 +84,18 @@ def fit_thresholds_on_normals(
                 pd.Series(declared_z).quantile(0.95)
             )
             fitted["declared_family_mismatch"].setdefault("other_family_margin", 0.5)
+        if "inst_step_mad_w" in getattr(baseline, "features", []):
+            inst_z = [
+                z["inst_step_mad_w"]
+                for z in (baseline.robust_z(row.to_dict()) for _, row in normals.iterrows())
+                if z.get("inst_step_mad_w") is not None
+            ]
+            if inst_z:
+                # Fires on ~1% of normal windows, so its surprisal weight stays high.
+                fitted.setdefault("inst_power_unsteady", {})
+                fitted["inst_power_unsteady"]["inst_step_z_min"] = float(
+                    pd.Series(inst_z).quantile(0.99)
+                )
     else:
         fitted.setdefault(
             "declared_family_mismatch",

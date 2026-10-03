@@ -6,12 +6,15 @@ evidence:
   - name: high_ramp
     necessity: required
     description: "급격한 전력 램프(p95 ramp)"
+  - name: unexplained_changepoint
+    necessity: required
+    description: "급변이 스케줄 로그로 설명되지 않음"
   - name: flat_power
     necessity: exclusion
     description: "평탄 고부하는 burst-ramp와 반대"
-  - name: unexplained_changepoint
-    necessity: supporting
-    description: "급변이 로그로 설명되지 않으면 더 의심"
+  - name: log_period_mismatch
+    necessity: exclusion
+    description: "로그 스텝과 전력 주기가 어긋나면 램프 공격이 아님"
 benign_lookalikes: []
 grid_relevance:
   mechanism: frequency_response_stress
@@ -21,6 +24,8 @@ observability:
   min_sample_hz: 1
   notes: "NVML 1초 평균을 전제로 해석"
 thresholds_provenance: dataset/eval/evidence_thresholds.json
+attack_ids: []
+profile: {form: burst, level: [mid, high], log: [mismatch, na], timescale: [seconds, long]}
 ---
 # 급격 부하 변동 공격 (Burst / Ramp Load Attack)
 
@@ -41,7 +46,8 @@ thresholds_provenance: dataset/eval/evidence_thresholds.json
 ## 정상 워크로드와의 구분 포인트
 정상 상황에서도 job 시작·종료, 체크포인트 저장, 데이터로더 병목에서 급격한
 전력 변화가 발생한다. 따라서 램프 크기만으로 단정할 수 없다. 스케줄러 이벤트
-(job 제출·종료 시각)와 시간적으로 정렬되지 않는 급변이 의심 대상이다.
+(job 제출·종료 시각)와 시간적으로 정렬되지 않는 급변(`unexplained_changepoint`)이
+같이 있어야 한다. `log_period_mismatch`가 켜지면 이 문서가 아니다.
 
 ## 물리적 관련성
 높음. 급격한 부하 증감은 계통 주파수 변화율(RoCoF)에 직접 영향을 준다.
@@ -57,3 +63,9 @@ thresholds_provenance: dataset/eval/evidence_thresholds.json
 
 ## Evidence 근거 (초안)
 급격한 부하 램프가 관성/주파수 응답에 충격을 주는 가설(시뮬 tier unsupported)
+
+## 관측 시그니처
+(DRAFT, 사람 승인 전)
+- 급격한 전력 상승·하강 (high power ramp), 로그로 설명되지 않는 변화점 (unexplained changepoint).
+- 큰 계단형 전력 변화가 반복되나 규칙적 사각파는 아니다.
+- 평탄한 고부하는 이 문서를 배제한다.

@@ -24,6 +24,8 @@ observability:
   min_sample_hz: 1
   notes: "NVML 1초 평균을 전제로 해석"
 thresholds_provenance: dataset/eval/evidence_thresholds.json
+attack_ids: []
+profile: {declared: consistent, form: [flat, small_periodic], inst: 'yes', level: high, util: decoupled}
 ---
 # LTMA (LLM Training Modulation Attack)
 
@@ -58,3 +60,10 @@ Bit2Watt (Ji, Pan, Xu, arXiv:2607.05993, 2026), 4.2.1절. 논문은 GPT-2 학습
 
 ## Evidence 근거 (초안)
 Bit2Watt LTMA: 실제 LLM 학습 안에서의 평균 유지형 부하 변조
+
+## 관측 시그니처
+(DRAFT, 사람 승인 전)
+- 1초 평균 전력은 평탄하거나 정상 학습과 비슷하다 (average power looks like normal training).
+- 1초 미만 순간 전력 요동 (sub-second instant power fluctuation): 순시 전력 변화폭이 같은 학습보다 크게 높다.
+- GPU 사용률과 전력 불일치 (power-utilization decoupling), 정상 학습 스텝 사이에 보조 연산 삽입.
+- 평탄한 고부하만으로는 LTMA가 아니다.

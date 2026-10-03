@@ -21,6 +21,9 @@ observability:
   min_sample_hz: 1
   notes: "NVML 1초 평균을 전제로 해석"
 thresholds_provenance: dataset/eval/evidence_thresholds.json
+attack_ids: ["AML.T0029", "AML.T0034"]
+profile: {declared: consistent, form: [burst, flat], level: [mid, high], timescale: [long,
+    seconds, none], util: coupled}
 ---
 # 에너지·지연 증폭 공격 (Sponge / Energy-Latency Attack)
 
@@ -56,3 +59,9 @@ Shumailov 등은 에너지 소비와 지연을 최대화하도록 설계한 입�
 
 ## Evidence 근거 (초안)
 에너지/지연을 노린 sponge 입력
+
+## 관측 시그니처
+(DRAFT, 사람 승인 전)
+- 추론 서비스에서 요청 수에 비해 고부하 지속 (sustained high load per request).
+- 에너지·지연을 키우는 입력으로 연산량 급증, 평탄한 고부하에 가깝게 보일 수 있다.
+- 진행 로그 스텝과 주기 일치는 이 문서를 배제한다.

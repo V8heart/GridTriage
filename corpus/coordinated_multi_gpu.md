@@ -6,9 +6,12 @@ evidence:
   - name: cross_job_sync
     necessity: required
     description: "서로 다른 선언 job 사이 GPU 위상 동기화"
-  - name: period_match
+  - name: log_period_mismatch
+    necessity: required
+    description: "각 작업 로그 스텝과 전력 주기가 1×/2×로 맞지 않음"
+  - name: flat_power
     necessity: exclusion
-    description: "단일 job 내부 step만으로 설명되면 협조 공격이 아님"
+    description: "평탄 고부하는 협조 변조가 아님"
   - name: period_mismatch
     necessity: supporting
     description: "각 GPU 변조가 로컬 로그와 불일치할 수 있음"
@@ -21,6 +24,8 @@ observability:
   min_sample_hz: 1
   notes: "NVML 1초 평균을 전제로 해석"
 thresholds_provenance: dataset/eval/evidence_thresholds.json
+attack_ids: ["T1496.001"]
+profile: {form: [square, burst], level: [mid, high], multi_gpu: sync, timescale: [seconds]}
 ---
 # 다중 GPU 협조 부하 변조 (Coordinated Multi-GPU Modulation)
 
@@ -44,6 +49,10 @@ thresholds_provenance: dataset/eval/evidence_thresholds.json
 - 같은 job_id / 같은 분산학습 그룹에 속한 GPU가 동기화 → 정상
 - 서로 다른 id_user / job_type에 속해 독립적이어야 할 job이 동기화 → 의심
 - 스케줄러가 함께 배치하지 않은 노드 간 위상 일치 → 강한 의심
+- idle 게이트가 idle인 GPU는 쌍에서 뺀다. companion notebook(~24W, 0 procs)과의
+  cross-job 점수는 협조 공격이 아니다.
+- `cross_job_sync`와 `log_period_mismatch`가 같이 켜져야 이 문서다. 느슨한
+  `period_match`가 같이 참이어도 빼지 않는다. `flat_power`면 이 문서가 아니다.
 
 ## 물리적 관련성
 높음. 개별 부하 변동은 계통에 무의미하지만 다수가 협조하면 합산 부하 변조가
@@ -58,3 +67,9 @@ Load-Altering Attack 연구는 인터넷 연결 부하를 조직적으로 조작
 
 ## Evidence 근거 (초안)
 다중 GPU 협조 변조로 주입 진폭을 키우는 시나리오
+
+## 관측 시그니처
+(DRAFT, 사람 승인 전)
+- 여러 GPU 동시 동기화 (multi-GPU synchronized power): 두 GPU 이상이 같은 박자로 전력 사각파 반복.
+- 큰 전력 진폭 swing (large power swing), 진행 로그 스텝과 전력 주기 불일치 (log period mismatch).
+- 서로 다른 작업으로 신고된 GPU들이 맞춰 움직이는 것이 핵심이다.

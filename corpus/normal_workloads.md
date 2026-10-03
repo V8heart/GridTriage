@@ -3,15 +3,12 @@ threat_id: B-NORMAL-001
 category: benign
 mitre_technique: null
 evidence:
-  - name: period_match
-    necessity: required
-    description: "전력 주기가 진행/요청 로그와 대체로 일치"
-  - name: period_mismatch
-    necessity: exclusion
-    description: "강한 주기 불일치는 정상 문서 배제 근거"
   - name: progress_log_available
-    necessity: supporting
+    necessity: required
     description: "정상 워크로드는 progress/request 로그가 있는 경우가 많음"
+  - name: log_period_mismatch
+    necessity: exclusion
+    description: "비교 가능한 느린 스텝이 전력 주기와 어긋나면 정상 문서 배제"
 benign_lookalikes: []
 grid_relevance:
   mechanism: none
@@ -21,6 +18,8 @@ observability:
   min_sample_hz: 1
   notes: "NVML 1초 평균을 전제로 해석"
 thresholds_provenance: dataset/eval/evidence_thresholds.json
+attack_ids: []
+profile: {declared: consistent, inst: 'no', util: coupled}
 ---
 # 정상 워크로드 프로파일 (오탐 방지용 기준)
 
@@ -38,6 +37,12 @@ thresholds_provenance: dataset/eval/evidence_thresholds.json
 - **데이터 로딩 병목**: I/O 대기로 GPU가 잠깐 놀았다가 재개 → 불규칙한 전력 변동.
 - **학습-평가(eval) 교차**: 학습 구간과 평가 구간의 부하가 달라 전력 프로파일이 두 레벨로 나뉨.
 
+## 공격과의 구분 포인트
+- 조서 `pattern`에 사각파(규칙적 duty·기계적 전환)가 없으면 정상 쪽으로 본다.
+- serving/batch처럼 `step_end`가 없어 Stage1 `period_match`가 항상 false인 경우는
+  그 칸만으로 정상을 배제하지 않는다. 도달 가능한 칸은 `progress_log_available`이다.
+- `period_comparable`이고 `log_period_mismatch`이면 이 정상 문서는 쓰지 않는다.
+
 ## 정상 판정의 핵심 근거
 - 변동의 원인이 맥락으로 설명됨 (예정된 작업, 알려진 사용자 패턴, 표준적 학습 동역학).
 - 이 사용자가 과거에도 유사한 패턴을 보였음.
@@ -49,3 +54,10 @@ thresholds_provenance: dataset/eval/evidence_thresholds.json
 
 ## Evidence 근거 (초안)
 오탐 방지용 정상 프로파일 집합
+
+## 관측 시그니처
+(DRAFT, 사람 승인 전)
+- 학습·추론·HPO 등 신고 작업과 맞는 전력 수준, 진행 로그 존재.
+- 작은 전력 진폭 또는 불규칙한 요청 기반 변동, 뚜렷한 이상 증거 없음.
+- 저전력 (low power) 대기·소형 서비스. 정상(normal) 판정 근거.
+- 신고 작업 유형과 전력 패턴 일치 (consistent with declared job).

@@ -19,7 +19,12 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dataset.declared_context import honest_declared_for_workload, sample_declared, sample_split_partner
+from dataset.declared_context import (
+    _declared_from_job,
+    honest_declared_for_workload,
+    sample_declared,
+    sample_split_partner,
+)
 from dataset.finalize_session import finalize_session
 from dataset.identifiers import is_session_id, new_run_id, new_session_id, require_session_id
 
@@ -45,6 +50,7 @@ LLM_TRAIN_WORKLOADS = {
 
 INFERENCE_WORKLOADS = {
     "llm_inference_serving": ("normal_llm_inference_serving", "serving"),
+    "llm_inference_serving_bursty": ("normal_llm_inference_serving", "bursty"),
     "llm_inference_batch": ("normal_llm_inference_batch", "batch"),
 }
 
@@ -65,6 +71,15 @@ ATTACK_WORKLOADS = {
     "swma_coordinated": ("swma", "swma_coordinated", False, "coordinated"),
     "ltma": ("ltma", "ltma_basic", True, "ltma"),
     "cryptojacking": ("cryptojacking", "crypto_flat", False, "crypto"),
+}
+
+# Misuse attacks: a real workload run under a false or abusive context
+# (bit2watt_impl.misuse_workloads). label, variant, true family, default declared job.
+MISUSE_WORKLOADS = {
+    "llmjacking": ("llmjacking", "llmjacking_serving", "inference", "notebook"),
+    "hidden_ml_training": ("hidden_ml_training", "hidden_finetune", "training", "online_inference"),
+    "sponge": ("sponge_attack", "sponge_long_gen", "inference", "online_inference"),
+    "burst_ramp": ("burst_ramp_attack", "burst_irregular", "training", None),
 }
 
 # Kept so older imports/tests that expect the name still resolve.
@@ -321,6 +336,10 @@ def build_plan(args) -> dict:
             workload.extend(["--batch-size", str(batch_size)])
         if seq_len is not None:
             workload.extend(["--seq-len", str(seq_len)])
+        if getattr(args, "dtype", None) is not None:
+            workload.extend(["--dtype", str(args.dtype)])
+        if getattr(args, "max_new_tokens", None) is not None:
+            workload.extend(["--max-new-tokens", str(args.max_new_tokens)])
     elif args.workload in VISION_WORKLOADS:
         gt_label, mode, multi = VISION_WORKLOADS[args.workload]
         gt_variant = mode
@@ -375,6 +394,21 @@ def build_plan(args) -> dict:
             workload.extend(["--llm-preset", str(preset)])
         if batch_size is not None:
             workload.extend(["--llm-micro-batch", str(int(batch_size))])
+    elif args.workload in MISUSE_WORKLOADS:
+        gt_label, gt_variant, true_family, forced_job = MISUSE_WORKLOADS[args.workload]
+        gt_is_attack = True
+        hosted = False
+        host_workload = None
+        module = "bit2watt_impl.misuse_workloads"
+        declared_policy = args.declared_policy  # sampled first; a forced job type overrides below
+        target_gpus = [args.gpu_id]
+        workload = [
+            sys.executable, "-m", module,
+            "--variant", gt_variant,
+            "--duration", str(duration),
+            "--gpu-id", str(args.gpu_id),
+            "--progress-log", str(progress_raw),
+        ]
     else:
         raise ValueError(f"unknown workload: {args.workload}")
 
@@ -443,6 +477,16 @@ def build_plan(args) -> dict:
                     declared_by_gpu[gid] = sample_split_partner(
                         anchor, rng, true_family=true_family, **target_sample
                     )
+
+    forced = getattr(args, "declared_job_type", None) or (
+        MISUSE_WORKLOADS[args.workload][3] if args.workload in MISUSE_WORKLOADS else None
+    )
+    if forced:
+        for gid, role in gpu_roles.items():
+            if role == "target":
+                user = declared_by_gpu.get(gid, {}).get("declared_user") or f"user_{int(rng.integers(0, 50)):03d}"
+                declared_by_gpu[gid] = _declared_from_job(forced, user)
+        declared_policy = "forced"
 
     collector = [
         sys.executable,
@@ -545,6 +589,7 @@ def main() -> None:
             *INFERENCE_WORKLOADS,
             *VISION_WORKLOADS,
             *ATTACK_WORKLOADS,
+            *MISUSE_WORKLOADS,
         ],
         required=True,
     )
@@ -559,6 +604,8 @@ def main() -> None:
     parser.add_argument("--grad-accum", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--rps", type=float, default=None)
+    parser.add_argument("--dtype", choices=["fp32", "fp16"], default=None, help="inference only")
+    parser.add_argument("--max-new-tokens", type=int, default=None, help="inference only")
     parser.add_argument("--dataloader", choices=["gpu", "cpu"], default=None)
     parser.add_argument("--host", choices=["mlp", "llm"], default="llm")
     parser.add_argument("--matrix-size", type=int, default=None)
@@ -587,6 +634,7 @@ def main() -> None:
         choices=["pool_random", "host_family_matched"],
         default="pool_random",
     )
+    parser.add_argument("--declared-job-type", default=None, help="force the target GPU's declared job type")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-busy", action="store_true")
     parser.add_argument(

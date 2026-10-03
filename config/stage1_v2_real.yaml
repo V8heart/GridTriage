@@ -24,6 +24,12 @@ idle_gate:
 stage2:
   evidence_rate_min: 0.6
   drop_progress_log_missing: true
+  log_period:
+    min_step_period_s: 1.0
+    freq_min_hz: 0.05
+    freq_max_hz: 0.70
+    harmonics: [1.0, 2.0]
+    rel_tol: 0.10
 progress_log_policy_required: v1_1_uniform_all_sessions
 tau_peak: 5.685808161764369
 tau_sync: 0.8

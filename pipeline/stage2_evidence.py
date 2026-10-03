@@ -7,10 +7,36 @@ from pathlib import Path
 
 RAW_FORBIDDEN = {"power_w", "util_gpu_pct", "power", "util", "timeseries", "andes_log", "embeddings"}
 
+PATTERN_BUNDLE_KEYS = (
+    "dominant_freq_hz",
+    "dominant_freq_hz_p10",
+    "dominant_freq_hz_p90",
+    "periodicity_strength",
+    "duty_regularity",
+    "swing_abs_w",
+    "swing_abs_w_p10",
+    "swing_abs_w_p90",
+    "mean_w",
+    "mean_w_p10",
+    "mean_w_p90",
+    "step_period_s",
+    "step_period_s_p10",
+    "step_period_s_p90",
+    "n_transitions_per_min",
+    "ramp_p95",
+    "inst_swing_abs_w",
+    "inst_step_mad_w",
+)
 
-def build_evidence_bundle(row: dict, *, drop_progress_log_missing: bool = False) -> dict:
+
+def build_evidence_bundle(
+    row: dict,
+    *,
+    drop_progress_log_missing: bool = False,
+    config: dict | None = None,
+) -> dict:
     """Create an LLM-safe evidence bundle without raw telemetry arrays."""
-    from pipeline.evidence_vocab import to_bool_evidence
+    from pipeline.evidence_vocab import log_period_bits, to_bool_evidence
 
     physics = None
     if any(str(key).startswith("physics_") for key in row):
@@ -33,8 +59,25 @@ def build_evidence_bundle(row: dict, *, drop_progress_log_missing: bool = False)
         bool_evidence = dict(raw_evidence)
     else:
         bool_evidence = to_bool_evidence(merged_for_bool)
+    src = {**features, **row}
+    if isinstance(row.get("pattern"), dict):
+        src.update(row["pattern"])
+    bool_evidence.update(log_period_bits(src, config))
+    noidle = src.get("cross_job_sync_index_noidle")
+    if noidle is not None:
+        from pipeline.evidence_vocab import merge_thresholds
+
+        tau_sync = float(merge_thresholds(config)["tau_sync"])
+        bool_evidence["cross_job_sync"] = float(noidle) >= tau_sync
     if drop_progress_log_missing:
         bool_evidence.pop("progress_log_missing", None)
+
+    pattern = row.get("pattern") if isinstance(row.get("pattern"), dict) else {}
+    pattern_out = {
+        key: pattern[key]
+        for key in PATTERN_BUNDLE_KEYS
+        if key in pattern and pattern[key] is not None
+    }
 
     declared = row.get("declared_context") if isinstance(row.get("declared_context"), dict) else {}
     bundle = {
@@ -55,6 +98,8 @@ def build_evidence_bundle(row: dict, *, drop_progress_log_missing: bool = False)
         },
         "physics": physics,
     }
+    if pattern_out:
+        bundle["pattern"] = pattern_out
     return _strip_forbidden(bundle)
 
 

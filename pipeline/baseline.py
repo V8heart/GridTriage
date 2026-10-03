@@ -32,6 +32,8 @@ DEFAULT_MAD_FLOORS = {
     "band_frac_0.7_2": 0.02,
     "band_frac_0.05_0.1": 0.02,
     "band_frac_2_nyq": 0.02,
+    "inst_swing_abs_w": 5.0,
+    "inst_step_mad_w": 1.0,
 }
 MEDIAN_FRAC_FLOOR = 0.05
 

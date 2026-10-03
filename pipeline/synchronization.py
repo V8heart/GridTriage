@@ -110,6 +110,7 @@ def session_window_sync_metrics(
     *,
     value_col: str = "power_w",
     declared_job_col: str = "declared_job_type",
+    exclude_gpu_ids: set[int] | frozenset[int] | None = None,
 ) -> dict:
     """Same-session window sync indices for all GPU pairs and cross-job pairs."""
     empty = {
@@ -120,10 +121,12 @@ def session_window_sync_metrics(
         "sync_pair": None,
         "cross_job_sync_pair": None,
     }
-    if session_df["gpu_id"].nunique() < 2:
+    skip = {int(g) for g in (exclude_gpu_ids or set())}
+    work = session_df if not skip else session_df[~session_df["gpu_id"].map(lambda g: int(g) in skip)]
+    if work["gpu_id"].nunique() < 2:
         return empty
     try:
-        _, aligned, hz = align_gpu_series(session_df, value_col=value_col, t0=t0, t1=t1)
+        _, aligned, hz = align_gpu_series(work, value_col=value_col, t0=t0, t1=t1)
     except ValueError:
         return empty
 

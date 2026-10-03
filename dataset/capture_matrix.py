@@ -306,7 +306,14 @@ def execute_captures(
     """Run remaining captures; a failed cell is logged and skipped, not fatal."""
     failures: list[dict[str, Any]] = []
     for position, item in enumerate(remaining):
-        result = runner(item)
+        error: str | None = None
+        try:
+            result = runner(item)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            result = subprocess.CompletedProcess(args=[], returncode=1)
         if result.returncode:
             record = {
                 "capture_key": item["capture_key"],
@@ -315,6 +322,8 @@ def execute_captures(
                 "returncode": int(result.returncode),
                 "epoch": time.time(),
             }
+            if error:
+                record["error"] = error
             if cleanup_fn is not None:
                 record["removed"] = cleanup_fn(item["capture_key"])
             append_failure(failures_path, record)

@@ -5,9 +5,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from dataset.window_truth import window_is_attack
-from pipeline.context_evidence import event_time_s, read_session_progress
+from pipeline.context_evidence import event_time_s, read_session_progress, step_period_from_log
 from pipeline.stage1_v2 import build_windows, load_config
 
 
@@ -24,6 +25,7 @@ def test_pipeline_reads_session_dir_progress_log(tmp_path: Path):
     events = read_session_progress(session)
     assert len(events) == 1
     assert events[0]["t"] == 2.5
+    assert "t_epoch" not in events[0]
 
 
 def test_session_reader_raw_log_opt_in(tmp_path: Path):
@@ -36,6 +38,7 @@ def test_session_reader_raw_log_opt_in(tmp_path: Path):
     events = read_session_progress(session, source="raw")
     assert len(events) == 1
     assert events[0]["t"] == 3.0
+    assert "t_epoch" not in events[0]
 
 
 def test_session_reader_never_uses_raw_log(tmp_path: Path):
@@ -52,6 +55,33 @@ def test_session_reader_never_uses_raw_log(tmp_path: Path):
         json.dumps({"event": "step_end", "t": 1.0}) + "\n"
     )
     assert read_session_progress(staging) == []
+
+
+def test_raw_step_end_epoch_only_yields_step_period(tmp_path: Path):
+    session = tmp_path / "s-0123456789abcdef"
+    session.mkdir()
+    (session / "session.json").write_text(json.dumps({"t0_epoch": 1000.0}))
+    lines = [
+        json.dumps({"event": "step_end", "gpu_id": 0, "t_epoch": 1000.0 + 0.5 * i})
+        for i in range(20)
+    ]
+    (session / "progress.raw.jsonl").write_text("\n".join(lines) + "\n")
+    events = read_session_progress(session, source="raw")
+    assert all("t_epoch" not in event for event in events)
+    period, n_steps, cv = step_period_from_log(events, 0.0, 20.0, gpu_id=0)
+    assert n_steps == 20
+    assert period == pytest.approx(0.5, abs=1e-9)
+    assert cv == pytest.approx(0.0, abs=1e-9)
+
+
+def test_real_session_raw_step_period_not_none():
+    session = Path("dataset/real/sessions/s-8314a2f2da64e776")
+    if not (session / "progress.raw.jsonl").is_file():
+        pytest.skip("dataset/real not available")
+    events = read_session_progress(session, source="raw")
+    period, n_steps, _ = step_period_from_log(events, 0.0, 1e9)
+    assert n_steps >= 2
+    assert period is not None and period > 0
 
 
 def test_event_time_uses_epoch_and_ignores_workload_t():

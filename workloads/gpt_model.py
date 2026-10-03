@@ -23,6 +23,9 @@ PRESETS: dict[str, GPTPreset] = {
     # trivially separable from SWMA/crypto matmuls. medium stays unused.
     "small": GPTPreset("small", n_layer=8, n_head=12, n_embd=768, vocab_size=4096, block_size=512),
     "medium": GPTPreset("medium", n_layer=6, n_head=8, n_embd=256, vocab_size=2048, block_size=256),
+    # ~1.3B random-weight decoder for serving captures: small kept serving at
+    # ~62 W (near idle), so request load never reached board power.
+    "serve_1b": GPTPreset("serve_1b", n_layer=24, n_head=16, n_embd=2048, vocab_size=32000, block_size=1024),
 }
 
 

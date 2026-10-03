@@ -6,12 +6,15 @@ evidence:
   - name: period_match
     necessity: required
     description: "규칙적 전력이 정상 step/동기화 주기로 설명됨"
+  - name: progress_log_available
+    necessity: required
+    description: "그 주기를 설명하는 progress/request 로그가 있음"
   - name: period_mismatch
     necessity: exclusion
     description: "주기 불일치가 있으면 정상이 아니다"
-  - name: progress_log_available
-    necessity: supporting
-    description: "DDP/체크포인트 등 정상 주기성의 설명 로그"
+  - name: log_period_mismatch
+    necessity: exclusion
+    description: "엄격한 로그-전력 주기 불일치가 있으면 정상 주기가 아님"
 benign_lookalikes: []
 grid_relevance:
   mechanism: none
@@ -21,6 +24,8 @@ observability:
   min_sample_hz: 1
   notes: "NVML 1초 평균을 전제로 해석"
 thresholds_provenance: dataset/eval/evidence_thresholds.json
+attack_ids: []
+profile: {declared: consistent, form: [square, small_periodic], log: match}
 ---
 # 정상이지만 공격과 유사한 주기적 워크로드 (Benign Periodic Workload)
 
@@ -42,7 +47,8 @@ high/low 전환이 규칙적으로 보일 수 있고 순간 전력 상승·하�
 - 스케줄러에 정상 등록된 job_id가 존재하고 실행 시간대가 일치
 - 승인된 id_user와 신고된 job_type이 실제 연산 특성과 부합
 - 동기화된 GPU들이 같은 분산학습 그룹에 속함
-- 주기가 학습 iteration 시간·체크포인트 주기와 설명 가능하게 대응
+- 주기가 학습 iteration 시간·체크포인트 주기와 맞고, 그 로그가 있다.
+  `log_period_mismatch`가 켜지면 이 문서가 아니다
 
 ## 운영상 취급
 이 문서와 높은 유사도로 매칭되는 이벤트는 후보로 선별되었더라도 정상으로
@@ -56,3 +62,9 @@ job 간 위상 일치)가 함께 확인될 때만 이루어진다.
 
 ## Evidence 근거 (초안)
 정상 분산학습의 규칙적 출렁임
+
+## 관측 시그니처
+(DRAFT, 사람 승인 전)
+- 주기적 전력 변화가 있으나 진행 로그 스텝과 전력 주기 일치 (period matches training steps).
+- 정상 분산학습·체크포인트·평가 전환처럼 설명되는 주기. 정상(normal) 판정 근거.
+- 신고 작업 유형과 전력 패턴 일치 (consistent with declared job).

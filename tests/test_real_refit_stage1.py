@@ -31,7 +31,7 @@ from pipeline.stage1_v2 import (
     zero_proc_mask,
 )
 from pipeline.stage2_evidence import build_evidence_bundle
-from pipeline.stage2_llm import judge, normal_verdict
+from pipeline.stage2_llm import normal_verdict
 from pipeline.stage2_segments import aggregate_bool_evidence, merge_candidate_segments
 
 
@@ -483,20 +483,16 @@ def test_merge_overlapping_windows_same_session_gpu():
     assert sizes == [1, 3]
 
 
-def test_benign_top1_normal_verdict_without_judge():
+def test_benign_top1_normal_verdict_helper_still_exists():
     verdict = normal_verdict("normal_workloads")
     assert verdict.verdict == "normal"
     assert verdict.closest_match == "normal_workloads"
-    with patch("pipeline.stage2_llm.judge", side_effect=AssertionError("judge must not run")):
-        # Decision path used by run_pipeline: skip judge when category is benign.
-        top_meta = {"category": "benign"}
-        stage2 = normal_verdict("benign_periodic") if top_meta.get("category") == "benign" else judge({}, [])
-        assert stage2.verdict == "normal"
 
 
-def test_v2_pipeline_benign_skips_judge(tmp_path: Path):
+def test_v2_pipeline_benign_rag_still_calls_judge(tmp_path: Path):
     from pipeline.rag_analyzer import SearchResult
     from pipeline.run_pipeline import run
+    from pipeline.stage2_llm import Stage2Verdict
 
     n = 220
     frame = pd.DataFrame({
@@ -520,12 +516,12 @@ def test_v2_pipeline_benign_skips_judge(tmp_path: Path):
     )
     calls = {"judge": 0}
 
-    def boom(*_args, **_kwargs):
+    def fake_judge(*_args, **_kwargs):
         calls["judge"] += 1
-        raise AssertionError("judge must not be called")
+        return Stage2Verdict("unknown", None, 0.1, [], [], "no shortcut")
 
     with patch("rag_analyzer.SignatureRetriever.search", return_value=[hit]), patch(
-        "pipeline.stage2_llm.judge", side_effect=boom
+        "pipeline.stage2_llm.judge", side_effect=fake_judge
     ):
         rows = run(
             type(
@@ -561,9 +557,8 @@ def test_v2_pipeline_benign_skips_judge(tmp_path: Path):
             )()
         )
     assert rows
-    assert rows[0]["verdict"]["verdict"] == "normal"
-    assert rows[0]["verdict"]["risk"] == "정상"
-    assert calls["judge"] == 0
+    assert calls["judge"] >= 1
+    assert rows[0]["verdict"]["verdict"] == "unknown"
 
 
 def test_visibility_groups_and_period_parse():

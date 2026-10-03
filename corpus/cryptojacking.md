@@ -24,6 +24,8 @@ observability:
   min_sample_hz: 1
   notes: "NVML 1초 평균을 전제로 해석"
 thresholds_provenance: dataset/eval/evidence_thresholds.json
+attack_ids: ["T1496", "T1496.001"]
+profile: {form: flat, inst: 'no', level: high, log: [mismatch, na], timescale: none, util: coupled}
 ---
 # GPU 크립토재킹 (Cryptojacking)
 
@@ -52,3 +54,9 @@ GPU 텔레메트리 기반 크립토재킹 탐지 선행연구 다수 (nvidia-sm
 
 ## Evidence 근거 (초안)
 지속 고부하·저변동 — 계통 공진 주장보다 자원 남용이 본질
+
+## 관측 시그니처
+(DRAFT, 사람 승인 전)
+- 평탄한 고부하 (flat high load near TDP), 고부하 지속 (sustained high load).
+- 작은 전력 진폭 (small swing), 규칙적 사각파 없음.
+- 진행 로그 스텝과 전력 주기가 일치하지 않거나 로그가 형식적이다. 신고 작업 유형과 전력 패턴 불일치 (declared job mismatch)가 흔하다.

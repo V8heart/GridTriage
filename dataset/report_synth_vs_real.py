@@ -107,6 +107,11 @@ def compare_synth_vs_real(
         },
         "attack_normal_mean_direction": direction,
         "same_direction": bool(same_direction),
+        "detection_vs_amplitude": {
+            "status": "pending_real_capture",
+            "note": "Post-capture: recall vs swing_abs_w / period_actual_s / matrix_size. Report TDP-fraction threshold, not a weakness.",
+            "axes": ["swing_abs_w", "period_actual_s", "matrix_size", "period_floored"],
+        },
         "generator_adjustment": (
             "none implied by this report"
             if same_direction

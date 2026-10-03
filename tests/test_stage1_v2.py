@@ -210,3 +210,13 @@ def test_impact_ignores_swing_alone():
         {"tdp_w": 450.0, "grid_weights": {"0.1_0.7": 1.0}},
     )
     assert comps["impact_raw"] == 0.0
+
+
+def test_empirical_tail_p_extrapolates_past_reference_max():
+    refs = list(np.linspace(0.0, 3.0, 200))
+    floor = 1 / (len(refs) + 1)
+    assert empirical_tail_p(10.0, refs) == floor
+    near = empirical_tail_p(3.5, refs, extrapolate=True)
+    far = empirical_tail_p(10.0, refs, extrapolate=True)
+    assert far < near <= floor
+    assert empirical_tail_p(1.0, refs, extrapolate=True) == empirical_tail_p(1.0, refs)

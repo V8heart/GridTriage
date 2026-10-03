@@ -19,6 +19,9 @@ ALLOWED_EVIDENCE_NAMES: frozenset[str] = frozenset(
         "high_ramp",
         "util_power_decoupled",
         "declared_family_mismatch",
+        "log_period_mismatch",
+        "period_comparable",
+        "inst_power_unsteady",
     }
 )
 
@@ -56,6 +59,7 @@ SCORE_RECOMPUTE_BOOL_KEYS: frozenset[str] = frozenset(
         "high_ramp",
         "util_power_decoupled",
         "cross_job_sync",
+        "inst_power_unsteady",
     }
 )
 
@@ -68,8 +72,61 @@ THRESHOLD_BASED_EVIDENCE: frozenset[str] = frozenset(
         "high_ramp",
         "util_power_decoupled",
         "declared_family_mismatch",
+        "inst_power_unsteady",
     }
 )
+
+DEFAULT_LOG_PERIOD: dict[str, Any] = {
+    "min_step_period_s": 1.0,
+    "freq_min_hz": 0.05,
+    "freq_max_hz": 0.70,
+    "harmonics": (1.0, 2.0),
+    "rel_tol": 0.10,
+}
+
+
+def merge_log_period(config: dict | None = None) -> dict[str, Any]:
+    out = dict(DEFAULT_LOG_PERIOD)
+    nested = ((config or {}).get("stage2") or {}).get("log_period") or {}
+    for key, value in nested.items():
+        out[key] = value
+    return out
+
+
+def log_period_bits(raw: dict, config: dict | None = None) -> dict[str, bool]:
+    """Stage2-only comparable log/power period bits. Never used in u_score."""
+    lp = merge_log_period(config)
+    try:
+        step = float(raw["step_period_s"]) if raw.get("step_period_s") is not None else None
+    except (TypeError, ValueError):
+        step = None
+    try:
+        freq = float(raw["dominant_freq_hz"]) if raw.get("dominant_freq_hz") is not None else None
+    except (TypeError, ValueError):
+        freq = None
+    if step is not None and (not math.isfinite(step) or step <= 0):
+        step = None
+    if freq is not None and (not math.isfinite(freq) or freq <= 0):
+        freq = None
+    comparable = (
+        step is not None
+        and step >= float(lp["min_step_period_s"])
+        and freq is not None
+        and float(lp["freq_min_hz"]) <= freq <= float(lp["freq_max_hz"])
+    )
+    match_tight = False
+    if comparable:
+        base = 1.0 / float(step)
+        rel_tol = float(lp["rel_tol"])
+        match_tight = any(
+            abs(freq - base * float(harm)) / max(base * float(harm), 1e-12) <= rel_tol
+            for harm in lp.get("harmonics") or (1.0, 2.0)
+        )
+    return {
+        "period_comparable": bool(comparable),
+        "log_period_mismatch": bool(comparable and not match_tight),
+    }
+
 
 DEFAULT_EVIDENCE_THRESHOLDS: dict[str, Any] = {
     # Fallback only when config/stage1_v2.yaml is missing keys.
@@ -94,6 +151,10 @@ DEFAULT_EVIDENCE_THRESHOLDS: dict[str, Any] = {
     "declared_family_mismatch": {
         "declared_mean_abs_z_min": 3.0,
         "other_family_margin": 0.5,
+    },
+    # Cohort robust z of inst_step_mad_w; None (unfitted) never fires.
+    "inst_power_unsteady": {
+        "inst_step_z_min": None,
     },
 }
 
@@ -194,14 +255,24 @@ def to_bool_evidence(raw: dict, config: dict | None = None) -> dict[str, bool]:
     tau_sync = float(thr["tau_sync"])
 
     strong_peak = peak_log >= tau_peak
-    # Always derive period_mismatch (no sticky bool).
+    # Stage1 formula: keep the strong_peak gate. Do not use period_match is False alone.
     period_mismatch = period_match is False and strong_peak
+    stage2_period = log_period_bits(raw, config)
 
     declared_z = float(raw.get("declared_family_mean_abs_z", 0.0) or 0.0)
     best_other = float(raw.get("best_other_family_mean_abs_z", 1e9) or 1e9)
     family_mismatch = (
         declared_z >= float(mismatch_thr["declared_mean_abs_z_min"])
         and best_other + float(mismatch_thr["other_family_margin"]) < declared_z
+    )
+
+    inst_thr = (thr.get("inst_power_unsteady") or {}).get("inst_step_z_min")
+    inst_z = raw.get("inst_step_z")
+    inst_unsteady = (
+        inst_thr is not None
+        and inst_z is not None
+        and math.isfinite(float(inst_z))
+        and float(inst_z) >= float(inst_thr)
     )
 
     ramp_max = flat.get("ramp_p95_w_per_s_max")
@@ -231,6 +302,9 @@ def to_bool_evidence(raw: dict, config: dict | None = None) -> dict[str, bool]:
         "high_ramp": ramp_p95 >= float(ramp["ramp_p95_w_per_s_min"]),
         "util_power_decoupled": util_mad >= float(decoupled["util_residual_mad_w_min"]),
         "declared_family_mismatch": family_mismatch,
+        "period_comparable": stage2_period["period_comparable"],
+        "log_period_mismatch": stage2_period["log_period_mismatch"],
+        "inst_power_unsteady": bool(inst_unsteady),
     }
 
 

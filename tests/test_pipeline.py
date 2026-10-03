@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import json
 from argparse import Namespace
 from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from bit2watt_impl.physics.simulation import power_series_to_relative_events
 from dataset.synth_attacks import cryptojacking, swma
 from pipeline.features import compute_window_features
+from pipeline import run_pipeline
 from pipeline.run_pipeline import run, stage1_screen
 
 
@@ -167,3 +170,68 @@ def test_pipeline_physics_failure_does_not_abort(tmp_path, capsys):
     assert results[0]["physics_converged"] is False
     assert results[0]["physics_osc_std"] is None
     assert results[0]["verdict"]
+
+
+def test_run_flushes_stage2_after_each_session(tmp_path):
+    first = swma(n=220)
+    second = cryptojacking(n=220)
+    telemetry = tmp_path / "two_sessions.csv"
+    pd.concat([first, second], ignore_index=True).to_csv(telemetry, index=False)
+    out = tmp_path / "stage2.json"
+    snapshots = []
+    orig = run_pipeline._write_stage2_results
+
+    def spy(path, results):
+        orig(path, results)
+        if path is not None:
+            snapshots.append([row["session_id"] for row in results])
+
+    with patch.object(run_pipeline, "_write_stage2_results", side_effect=spy):
+        results = run(
+            _base_run_args(
+                telemetry=str(telemetry),
+                window=200,
+                stride=200,
+                out=str(out),
+            )
+        )
+
+    assert results
+    session_ids = [row["session_id"] for row in results]
+    assert len(set(session_ids)) == 2
+    session_flushes = [snap for snap in snapshots if snap]
+    assert any(len(set(snap)) == 1 for snap in session_flushes)
+    assert any(len(set(snap)) == 2 for snap in session_flushes)
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    assert [row["session_id"] for row in saved] == session_ids
+
+
+def test_run_keeps_finished_session_if_later_session_fails(tmp_path):
+    first = swma(n=220)
+    second = cryptojacking(n=220)
+    telemetry = tmp_path / "two_sessions_crash.csv"
+    pd.concat([first, second], ignore_index=True).to_csv(telemetry, index=False)
+    out = tmp_path / "stage2.json"
+    flushes = {"n": 0}
+    orig = run_pipeline._write_stage2_results
+
+    def spy(path, results):
+        orig(path, results)
+        flushes["n"] += 1
+        if flushes["n"] == 1:
+            raise RuntimeError("stop after first session")
+
+    with patch.object(run_pipeline, "_write_stage2_results", side_effect=spy):
+        with pytest.raises(RuntimeError, match="stop after first session"):
+            run(
+                _base_run_args(
+                    telemetry=str(telemetry),
+                    window=200,
+                    stride=200,
+                    out=str(out),
+                )
+            )
+
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    assert saved
+    assert len({row["session_id"] for row in saved}) == 1

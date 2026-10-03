@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from pipeline.run_pipeline import _write_stage1_envelope
+from pipeline.run_pipeline import _write_stage1_envelope, _write_stage2_results
 
 
 def test_stage1_envelope_includes_grid_watch_and_zero_candidates(tmp_path: Path):

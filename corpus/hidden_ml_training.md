@@ -12,6 +12,9 @@ evidence:
   - name: period_match
     necessity: exclusion
     description: "공식 학습 로그와 주기가 맞으면 숨은 학습으로 보기 어려움"
+  - name: log_period_mismatch
+    necessity: exclusion
+    description: "엄격한 로그-전력 주기 불일치는 숨은 학습보다 SWMA 쪽 신호다"
   - name: period_mismatch
     necessity: supporting
     description: "숨은 커널이 별도 주기를 만들면 mismatch로 관측"
@@ -24,6 +27,8 @@ observability:
   min_sample_hz: 1
   notes: "NVML 1초 평균을 전제로 해석"
 thresholds_provenance: dataset/eval/evidence_thresholds.json
+attack_ids: ["T1496.001"]
+profile: {declared: mismatch, form: [flat, small_periodic], level: [mid, high]}
 ---
 # 비인가 은닉 ML 학습 (Hidden / Unauthorized ML Training)
 
@@ -45,6 +50,9 @@ thresholds_provenance: dataset/eval/evidence_thresholds.json
 전력·사용률 패턴만으로는 정상 학습과 거의 구분되지 않는다. 판단은 맥락 증거에
 의존한다: 스케줄러에 등록되지 않은 job, 승인되지 않은 사용자(id_user), 신고된
 job_type과 실제 연산 특성의 불일치, 예약되지 않은 시간대 실행.
+progress log가 있다는 사실만으로는 숨은 학습이 아니라고 단정할 수 없고,
+로그 존재만으로는 숨은 학습의 근거가 되지 않는다.
+`log_period_mismatch`가 켜지면 이 문서가 아니다.
 
 ## 물리적 관련성
 단독으로는 전력 인프라 위협이 낮다. 다만 다수 노드에서 동시에 발생하면 시설
@@ -59,3 +67,9 @@ MITRE ATT&CK T1496.001 Compute Hijacking과도 연결된다.
 
 ## Evidence 근거 (초안)
 스케줄러 선언과 불일치하는 비인가 학습
+
+## 관측 시그니처
+(DRAFT, 사람 승인 전)
+- 학습과 같은 주기적 부하가 학습이 아닌 작업으로 신고됨 (declared job mismatch).
+- 진행 로그가 없거나 스텝과 전력 주기가 맞지 않는다.
+- 진행 로그 스텝과 전력 주기 일치는 이 문서를 배제한다.

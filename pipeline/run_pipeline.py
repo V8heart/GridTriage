@@ -296,6 +296,71 @@ def _write_stage2_results(path: Path | None, results: list) -> None:
     os.replace(tmp, target)
 
 
+PATTERN_MEDIAN_KEYS = (
+    "dominant_freq_hz",
+    "periodicity_strength",
+    "duty_regularity",
+    "swing_abs_w",
+    "mean_w",
+    "step_period_s",
+    "inst_swing_abs_w",
+    "inst_step_mad_w",
+)
+
+
+def _window_numeric_map(item: pd.Series) -> dict:
+    merged: dict = {}
+    for container in (item.get("evidence"), item.get("features")):
+        if isinstance(container, dict):
+            merged.update(container)
+    for key in (*PATTERN_MEDIAN_KEYS, "n_transitions", "ramp_p95_w_per_s", "window_start_s", "window_end_s"):
+        if key not in item.index:
+            continue
+        value = item.get(key)
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            continue
+        if not isinstance(value, (dict, list)):
+            merged.setdefault(key, value)
+    return merged
+
+
+def _segment_pattern(part: pd.DataFrame) -> dict:
+    """Window-median pattern card. Do not use first-window or merged-span features."""
+    maps = [_window_numeric_map(item) for _, item in part.iterrows()]
+    if not maps:
+        return {}
+    frame = pd.DataFrame(maps)
+    pattern: dict = {}
+    for key in PATTERN_MEDIAN_KEYS:
+        if key not in frame.columns:
+            continue
+        series = pd.to_numeric(frame[key], errors="coerce")
+        if not series.notna().any():
+            continue
+        pattern[key] = float(series.median())
+        if key in {"dominant_freq_hz", "step_period_s", "swing_abs_w", "mean_w"}:
+            pattern[f"{key}_p10"] = float(series.quantile(0.10))
+            pattern[f"{key}_p90"] = float(series.quantile(0.90))
+    if "n_transitions" in frame.columns:
+        trans = pd.to_numeric(frame["n_transitions"], errors="coerce")
+        duration_s = None
+        if "window_start_s" in frame.columns and "window_end_s" in frame.columns:
+            starts = pd.to_numeric(frame["window_start_s"], errors="coerce")
+            ends = pd.to_numeric(frame["window_end_s"], errors="coerce")
+            if starts.notna().any() and ends.notna().any():
+                duration_s = float((ends - starts).median())
+        if trans.notna().any():
+            if duration_s and duration_s > 0:
+                pattern["n_transitions_per_min"] = float((trans / (duration_s / 60.0)).median())
+            else:
+                pattern["n_transitions_per_min"] = float(trans.median())
+    if "ramp_p95_w_per_s" in frame.columns:
+        ramp = pd.to_numeric(frame["ramp_p95_w_per_s"], errors="coerce")
+        if ramp.notna().any():
+            pattern["ramp_p95"] = float(ramp.median())
+    return pattern
+
+
 def _segment_candidate_frame(candidates: pd.DataFrame, config: dict) -> pd.DataFrame:
     from pipeline.stage2_segments import aggregate_bool_evidence, merge_candidate_segments
 
@@ -318,6 +383,11 @@ def _segment_candidate_frame(candidates: pd.DataFrame, config: dict) -> pd.DataF
         first["n_windows"] = int(len(part))
         first["evidence_bool"] = bools
         first["evidence_rates"] = rates
+        first["pattern"] = _segment_pattern(part)
+        if "cross_job_sync_index_noidle" in part.columns:
+            noidle = pd.to_numeric(part["cross_job_sync_index_noidle"], errors="coerce")
+            if noidle.notna().any():
+                first["cross_job_sync_index_noidle"] = float(noidle.median())
         if "u_score" in part:
             first["u_score"] = float(pd.to_numeric(part["u_score"], errors="coerce").median())
         rows.append(first)
@@ -537,6 +607,9 @@ def run(args):
             if raw_attack_id is not None and not pd.isna(raw_attack_id) and str(raw_attack_id)
             else str(cand["session_id"])
         )
+        raw_variant = (
+            original["gt_variant"].iloc[0] if "gt_variant" in original.columns else None
+        )
         components = anomaly_score_components(
             feats,
             z_score=z_like_score,
@@ -553,6 +626,11 @@ def run(args):
             "window_start": start,
             "window_end": end,
             "ground_truth": raw_label,
+            "gt_variant": (
+                str(raw_variant)
+                if raw_variant is not None and not pd.isna(raw_variant) and str(raw_variant)
+                else None
+            ),
             "swing_ratio": round(float(cand["swing_ratio"]), 3),
             "z_score": round(z_like_score, 3),
             "candidate_reasons": str(cand["candidate_reasons"]).split(","),
@@ -587,6 +665,13 @@ def run(args):
                 "grid_watch": bool(cand.get("grid_watch", False)),
                 "robust_z": cand.get("robust_z", {}),
             })
+            if cand.get("pattern"):
+                row["pattern"] = cand.get("pattern")
+            if cand.get("cross_job_sync_index_noidle") is not None and not (
+                isinstance(cand.get("cross_job_sync_index_noidle"), float)
+                and pd.isna(cand.get("cross_job_sync_index_noidle"))
+            ):
+                row["cross_job_sync_index_noidle"] = float(cand.get("cross_job_sync_index_noidle"))
 
         # Ops mode: event-triggered physics validation on Stage-1 candidates only.
         if getattr(args, "physics_validate", False):
@@ -618,32 +703,28 @@ def run(args):
             from pipeline.corpus_schema import parse_corpus_v2
             from pipeline.rag_analyzer import CORPUS_DIR
             from pipeline.stage2_evidence import build_evidence_bundle
-            from pipeline.stage2_llm import judge, normal_verdict
+            from pipeline.stage2_llm import judge
 
-            docs = []
-            for result in retrieved:
-                name = result.name if hasattr(result, "name") else result[0]
-                path = CORPUS_DIR / f"{name}.md"
-                if path.exists():
-                    docs.append(parse_corpus_v2(path))
+            docs = [parse_corpus_v2(path) for path in sorted(CORPUS_DIR.glob("*.md"))]
             top1_name = None
             if retrieved:
                 top1_name = retrieved[0].name if hasattr(retrieved[0], "name") else retrieved[0][0]
             drop_missing = bool((stage1_config.get("stage2") or {}).get("drop_progress_log_missing"))
             if cand.get("evidence_bool"):
                 row["evidence_bool"] = cand.get("evidence_bool")
-            bundle = build_evidence_bundle(row, drop_progress_log_missing=drop_missing)
-            if top_meta.get("category") == "benign":
-                stage2 = normal_verdict(top1_name)
-            else:
-                stage2 = judge(
-                    bundle,
-                    docs,
-                    backend=args.llm_backend,
-                    model=args.llm_model,
-                    fallback="legacy",
-                    retriever_top1=top1_name,
-                )
+            bundle = build_evidence_bundle(
+                row,
+                drop_progress_log_missing=drop_missing,
+                config=stage1_config,
+            )
+            stage2 = judge(
+                bundle,
+                docs,
+                backend=args.llm_backend,
+                model=args.llm_model,
+                fallback="legacy",
+                retriever_top1=top1_name,
+            )
             risk = {"known": "의심", "normal": "정상", "unknown": "주의", "partial": "주의"}.get(stage2.verdict, "주의")
             row["stage2_version"] = "v2"
             row["stage2_evidence_bundle"] = bundle
@@ -658,6 +739,7 @@ def run(args):
                 "matched_evidence": stage2.matched_evidence,
                 "contradicting_evidence": stage2.contradicting_evidence,
                 "fallback_used": stage2.fallback_used,
+                "prompt_eval_count": stage2.prompt_eval_count,
             }
             row["threat_id"] = row["verdict"]["closest_match"]
         else:

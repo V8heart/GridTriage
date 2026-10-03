@@ -1,0 +1,7 @@
+# LTMA recapture with the fixed instant-power collector (6 sessions, host = LLM finetune).
+--workload ltma --host llm --aux-width 2048 --seed 201
+--workload ltma --host llm --aux-width 2048 --seed 202
+--workload ltma --host llm --aux-width 2048 --seed 203
+--workload ltma --host llm --aux-width 2048 --seed 204
+--workload ltma --host llm --aux-width 2048 --seed 205
+--workload ltma --host llm --aux-width 2048 --seed 206

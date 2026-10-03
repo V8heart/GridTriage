@@ -30,11 +30,19 @@ def run(args) -> None:
     random.seed(args.seed)
 
     model = build_gpt(args.preset, device=device)
+    if args.dtype == "fp16":
+        model = model.half()
     model.eval()
     log = ProgressLog(args.progress_log, int(args.gpu_id))
     log.emit("workload_start", mode=args.mode, preset=args.preset)
     deadline = time.monotonic() + args.max_seconds
     req = 0
+    # bursty: open-loop Poisson arrivals whose rate alternates between calm and
+    # busy phases of random length, so load follows traffic rather than a clock.
+    base_rps = max(float(args.rps), 0.1)
+    phase_busy = False
+    phase_end = time.monotonic() + random.uniform(30.0, 120.0)
+    next_arrival = time.monotonic()
     try:
         while time.monotonic() < deadline:
             if args.mode == "diurnal":
@@ -43,10 +51,22 @@ def run(args) -> None:
                 quiet = 0.05 + 0.55 * (1.0 - abs(hour_frac - 0.5) * 2.0)
                 time.sleep(quiet * random.uniform(0.02, 0.2))
             elif args.mode == "serving":
-                time.sleep(1.0 / max(float(args.rps), 0.1))
+                time.sleep(1.0 / base_rps)
+            elif args.mode == "bursty":
+                now = time.monotonic()
+                if now >= phase_end:
+                    phase_busy = not phase_busy
+                    phase_end = now + (
+                        random.uniform(10.0, 45.0) if phase_busy else random.uniform(30.0, 120.0)
+                    )
+                    log.emit("phase_change", phase="busy" if phase_busy else "calm")
+                if next_arrival > now:
+                    time.sleep(min(next_arrival - now, max(0.0, deadline - now)))
+                rate = base_rps * (args.burst_factor if phase_busy else 1.0)
+                next_arrival = max(next_arrival, time.monotonic() - 5.0) + random.expovariate(rate)
 
             n_prompt = random.randint(8, min(args.seq_len, model.cfg.block_size // 2))
-            n_gen = random.randint(4, min(32, model.cfg.block_size - n_prompt))
+            n_gen = random.randint(4, min(args.max_new_tokens, model.cfg.block_size - n_prompt))
             req_id = f"r{req}"
             prompt_tokens = n_prompt * args.batch_size
             log.emit(
@@ -93,6 +113,8 @@ def run(args) -> None:
                 "resolved_config": {
                     "batch_size": args.batch_size,
                     "seq_len": args.seq_len,
+                    "max_new_tokens": args.max_new_tokens,
+                    "dtype": args.dtype,
                     "device": str(device),
                 },
                 "native_progress_available": True,
@@ -105,7 +127,7 @@ def run(args) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["batch", "serving", "diurnal"], default="serving")
+    parser.add_argument("--mode", choices=["batch", "serving", "diurnal", "bursty"], default="serving")
     parser.add_argument("--preset", choices=sorted(PRESETS), default="small")
     parser.add_argument("--gpu-id", type=int, default=0)
     parser.add_argument("--max-seconds", type=float, default=30)
@@ -113,6 +135,9 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--rps", type=float, default=2.0)
     parser.add_argument("--seq-len", type=int, default=128)
+    parser.add_argument("--max-new-tokens", type=int, default=32)
+    parser.add_argument("--dtype", choices=["fp32", "fp16"], default="fp32")
+    parser.add_argument("--burst-factor", type=float, default=4.0, help="bursty: busy-phase rate multiplier")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--progress-log", default=None)
     parser.add_argument("--allow-cpu", action="store_true")

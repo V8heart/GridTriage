@@ -308,8 +308,10 @@ def analyze_with_llm(description: str, retrieved, context: dict | None = None,
 
     if backend == "ollama":
         try:
+            from pipeline.stage2_llm import ollama_url
+
             req = urllib.request.Request(
-                "http://localhost:11434/api/generate",
+                ollama_url("/api/generate"),
                 data=json.dumps({
                     "model": model,
                     "prompt": prompt,

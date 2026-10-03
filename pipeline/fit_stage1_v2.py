@@ -23,6 +23,8 @@ from pipeline.stage1_v2 import (
     EVIDENCE_WEIGHT_CAP,
     SUSPICIOUS_EVIDENCE_KEYS,
     build_windows,
+    instant_evidence_stats,
+    score_features,
     impact_components,
     load_config,
     load_truth_index,
@@ -79,6 +81,7 @@ def fit_evidence_surprisal_weights(
         data = row.to_dict()
         raw = dict(data.get("evidence") or {})
         raw.update({k: v for k, v in baseline.declared_family_mismatch_stats(data).items() if v is not None})
+        raw.update(instant_evidence_stats(baseline.robust_z(data)))
         merged = strip_recompute_bools({**data, **raw})
         bools = to_bool_evidence(merged, config)
         rows.append({**data, "evidence_bool": bools})
@@ -99,13 +102,14 @@ def fit_evidence_surprisal_weights(
     }
 
 
-def _collect_feature_abs_z(cal_normals: pd.DataFrame, baseline: CohortBaseline) -> dict:
+def _collect_feature_abs_z(cal_normals: pd.DataFrame, baseline: CohortBaseline, config: dict) -> dict:
+    scored = score_features(baseline, config)
     by_family: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     global_bucket: dict[str, list[float]] = defaultdict(list)
     per_row_z: list[dict[str, float]] = []
     for _, row in cal_normals.iterrows():
         z = baseline.robust_z(row.to_dict())
-        abs_z = {k: abs(v) for k, v in z.items() if k != "baseline_level" and k in FEATURES_V2}
+        abs_z = {k: abs(v) for k, v in z.items() if k != "baseline_level" and k in scored}
         per_row_z.append(abs_z)
         family = str(row.get("declared_job_family", "unknown"))
         band = row.get("expected_band")
@@ -186,6 +190,7 @@ def fit(
         min_sessions=int(config.get("min_sessions", 1)),
         min_sessions_band=int(config.get("min_sessions_band", 2)),
         mad_floors=mad_floors,
+        features=[*FEATURES_V2, *config.get("extra_features", [])],
     )
 
     thresholds = fit_thresholds_on_normals(train_normals, config, baseline=baseline)
@@ -210,7 +215,7 @@ def fit(
         weight_report["evidence_surprisal_weights"]["progress_log_missing"] = 0.0
         policy_ok = False if config.get("force_zero_progress_log_missing") else policy_ok
 
-    feature_abs_z, _ = _collect_feature_abs_z(cal_normals, baseline)
+    feature_abs_z, _ = _collect_feature_abs_z(cal_normals, baseline, config)
 
     # Partial calibration used while scoring cal normals (LOO feature tails).
     partial_cal = {
@@ -229,7 +234,7 @@ def fit(
     for _, row in cal_normals.iterrows():
         data = row.to_dict()
         z = baseline.robust_z(data)
-        abs_z = {k: abs(v) for k, v in z.items() if k != "baseline_level" and k in FEATURES_V2}
+        abs_z = {k: abs(v) for k, v in z.items() if k != "baseline_level" and k in score_features(baseline, config)}
         full = score_window(
             data, baseline, partial_cal, config, profile="full", leave_out_feature_z=abs_z
         )

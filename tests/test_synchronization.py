@@ -63,6 +63,38 @@ def test_window_sync_and_cross_job():
     assert metrics["cross_job_sync_index"] > 0.9
 
 
+def test_idle_gpu_excluded_from_cross_job_pairs():
+    t = np.arange(400) / 10
+    signal = 100 + 40 * np.sin(2 * np.pi * 0.5 * t)
+    frame = pd.concat(
+        [
+            pd.DataFrame({
+                "timestamp": t,
+                "gpu_id": 0,
+                "power_w": signal,
+                "session_id": "mix",
+                "declared_job_type": "hpo_sweep",
+                "observed_n_procs": 2,
+            }),
+            pd.DataFrame({
+                "timestamp": t,
+                "gpu_id": 1,
+                "power_w": signal,
+                "session_id": "mix",
+                "declared_job_type": "notebook",
+                "observed_n_procs": 0,
+            }),
+        ],
+        ignore_index=True,
+    )
+    with_idle = session_window_sync_metrics(frame, 5.0, 25.0)
+    assert with_idle["cross_job_sync_index"] > 0.0
+    without_idle = session_window_sync_metrics(frame, 5.0, 25.0, exclude_gpu_ids={1})
+    assert without_idle["sync_applicable"] is False
+    assert without_idle["cross_job_sync_index"] == 0.0
+    assert without_idle["cross_job_sync_pair"] is None
+
+
 def test_cross_session_alignment_rejected():
     t = np.arange(100) / 10
     frame = pd.concat(
