@@ -26,3 +26,23 @@ def test_keyword_queries_are_generic():
     q = agent.keyword_queries({"level": "high", "form": "flat", "declared": "mismatch"})
     assert all(part.startswith("GPU") for part in q)
     assert not any("s-" in part for part in q)  # never session ids
+
+
+def test_signature_uses_query_vocabulary():
+    from pipeline.kb.query import PHRASES
+    from pipeline.research.agent import signature
+
+    text = signature({"form": ["square"]}, {"required": ["log_period_mismatch"], "supporting": [], "exclusion": ["flat_power"]})
+    assert PHRASES["log_mismatch"] in text
+    assert "다음은 아니다: " + PHRASES["flat_high"] in text
+
+
+def test_requirement_gate_turns_forced_card_into_unknown():
+    from pipeline.stage2_rag_judge import requirement_gate
+
+    docs = [{"card": "burst_ramp_attack", "requires": ["high_ramp"], "excludes": ["flat_power"]},
+            {"card": "cryptojacking", "requires": [], "excludes": ["period_match"]}]
+    gate = requirement_gate("burst_ramp_attack", docs, {"high_ramp": False, "flat_power": True})
+    assert gate == {"card": "burst_ramp_attack", "missing_required": ["high_ramp"], "exclusion_on": ["flat_power"]}
+    assert requirement_gate("cryptojacking", docs, {"period_match": False}) is None
+    assert requirement_gate("no_rules_card", docs, {}) is None

@@ -3,11 +3,11 @@ import numpy as np
 import pytest
 
 import pipeline.live as live
-from pipeline.v4_core import REFIT, OFFICIAL_STAGE1
+from pipeline.v4_core import OFFICIAL_STAGE1, model_root
 
 pytestmark = pytest.mark.skipif(
-    not (REFIT / OFFICIAL_STAGE1[0] / OFFICIAL_STAGE1[1] / "cohort_baseline_v2.json").exists(),
-    reason="fitted Stage1 artifacts are local-only (dataset/real is not in git)",
+    not (model_root(*OFFICIAL_STAGE1) / OFFICIAL_STAGE1[0] / OFFICIAL_STAGE1[1] / "cohort_baseline_v2.json").exists(),
+    reason="official Stage1 artifacts missing (models/ or dataset/real refit)",
 )
 
 

@@ -101,7 +101,7 @@ def main() -> None:
     parser.add_argument("--scope", default="all")
     parser.add_argument("--configs", nargs="+", default=list(CONFIGS))
     parser.add_argument("--models", nargs="+", default=["gemma3:12b", "deepseek-r1:14b"])
-    parser.add_argument("--hosts", nargs="+", default=["http://10.41.12.52:11434", "http://127.0.0.1:11434"])
+    parser.add_argument("--hosts", nargs="+", default=["http://127.0.0.1:11434"], help="one or more Ollama servers (parallel workers)")
     parser.add_argument("--workers-per-host", type=int, default=2)
     parser.add_argument("--k", type=int, default=8)
     parser.add_argument("--out", type=Path, default=ROOT / "dataset/eval/stage2_v4_ablation.jsonl")

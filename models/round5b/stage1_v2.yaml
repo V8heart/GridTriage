@@ -1,0 +1,78 @@
+alpha: 0.05
+alpha_high_impact: 0.05
+score_mode: tail_min_plus_evidence
+tdp_w: 450.0
+nvml_avg_window_s: 1.0
+min_sessions: 3
+min_sessions_band: 2
+min_windows: 30
+mondrian_min_n: 30
+cohort_expected_band: true
+cohort_mid_group: false
+cohort_keys:
+- declared_job_family
+- expected_band
+- gpu_model
+force_zero_progress_log_missing: true
+alpha_min_detectable_recall: 0.0
+idle_gate:
+  enabled: true
+  mean_w_max: 40.0
+  n_procs_agg: median
+stage2:
+  evidence_rate_min: 0.6
+  drop_progress_log_missing: true
+progress_log_policy_required: v1_1_uniform_all_sessions
+grid_weights:
+  0.05_0.1: 0.5
+  0.1_0.7: 1.0
+  '0.7_2': 0.7
+  2_nyq: 0.2
+grid_weights_provenance: provisional_placeholder
+util_min_range_pct: 5.0
+mad_floors:
+  inst_swing_abs_w: 10.0
+  inst_step_mad_w: 5.0
+  mean_w: 5.0
+  swing_abs_w: 5.0
+  util_residual_mad_w: 1.0
+  util_slope_w_per_pct: 0.05
+  dominant_freq_hz: 0.02
+  spectral_entropy: 0.02
+  band_frac_0.1_0.7: 0.02
+  band_frac_0.7_2: 0.02
+  band_frac_0.05_0.1: 0.02
+  band_frac_2_nyq: 0.02
+evidence_weights:
+  period_mismatch: 1.0
+  unexplained_changepoint: 0.0
+  cross_job_sync: 0.0
+  progress_log_missing: 0.0
+  sustained_high_load: 1.0
+  flat_power: 0.0
+  high_ramp: 0.0
+  util_power_decoupled: 1.0
+  declared_family_mismatch: 1.0
+alpha_selection:
+  selected_on: cal
+  rule: cal_cohort_weighted_fp <= 0.10, maximize attack recall; tie -> smaller alpha;
+    alpha_high_impact = alpha (no impact relaxation); missing cal cohorts substituted
+    from train
+  selected:
+    alpha: 0.05
+    cal_normal_candidate_rate: 0.031484257871064465
+    cal_cohort_weighted_fp: 0.05524798098482955
+    cal_attack_recall: 0.5075757575757576
+    cal_detectable_recall: 0.56353591160221
+    fit_target_normal_fp: 0.06453634085213032
+    substituted_from_train:
+    - interactive|low
+    - training|low
+# round4: NVML instant power (recovered from the pre-fix collector) as extra cohort features.
+extra_features:
+- inst_swing_abs_w
+- inst_step_mad_w
+# round5: instant features only through inst_power_unsteady evidence, not the tail-min score.
+evidence_only_features:
+- inst_swing_abs_w
+- inst_step_mad_w

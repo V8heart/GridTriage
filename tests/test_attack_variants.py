@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import argparse
 import json
 
@@ -149,7 +150,7 @@ def test_dry_plan_argv_snapshots():
             "--progress-log",
             "/tmp/host.jsonl",
         ],
-        cwd="/home/agew1597/KDN",
+        cwd=str(Path(__file__).resolve().parents[1]),
         capture_output=True,
         text=True,
         check=True,
@@ -175,7 +176,7 @@ def test_dry_plan_argv_snapshots():
             "--progress-log",
             "/tmp/swma.jsonl",
         ],
-        cwd="/home/agew1597/KDN",
+        cwd=str(Path(__file__).resolve().parents[1]),
         capture_output=True,
         text=True,
         check=True,

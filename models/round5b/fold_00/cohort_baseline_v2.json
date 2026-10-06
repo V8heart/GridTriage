@@ -1,0 +1,714 @@
+{
+  "cohort_keys": [
+    "declared_job_family",
+    "expected_band",
+    "gpu_model"
+  ],
+  "features": [
+    "mean_w",
+    "swing_abs_w",
+    "band_frac_0.1_0.7",
+    "band_frac_0.7_2",
+    "dominant_freq_hz",
+    "util_slope_w_per_pct",
+    "util_residual_mad_w",
+    "spectral_entropy",
+    "inst_swing_abs_w",
+    "inst_step_mad_w"
+  ],
+  "min_windows": 30,
+  "min_sessions": 3,
+  "min_sessions_band": 2,
+  "mad_floors": {
+    "inst_swing_abs_w": 10.0,
+    "inst_step_mad_w": 5.0,
+    "mean_w": 5.0,
+    "swing_abs_w": 5.0,
+    "util_residual_mad_w": 1.0,
+    "util_slope_w_per_pct": 0.05,
+    "dominant_freq_hz": 0.02,
+    "spectral_entropy": 0.02,
+    "band_frac_0.1_0.7": 0.02,
+    "band_frac_0.7_2": 0.02,
+    "band_frac_0.05_0.1": 0.02,
+    "band_frac_2_nyq": 0.02
+  },
+  "fallback_counts": {
+    "full": 3976,
+    "band": 320,
+    "family": 0,
+    "global": 80
+  },
+  "stats": {
+    "full:inference|low|NVIDIA GeForce RTX 4090": {
+      "n": 120,
+      "n_windows": 120,
+      "n_sessions": 3,
+      "features": {
+        "mean_w": {
+          "median": 66.142465,
+          "mad": 5.0,
+          "mad_raw": 1.8811766666666614,
+          "mad_floor": 5.0
+        },
+        "swing_abs_w": {
+          "median": 2.7371750000000006,
+          "mad": 5.0,
+          "mad_raw": 0.900425000000002,
+          "mad_floor": 5.0
+        },
+        "band_frac_0.1_0.7": {
+          "median": 0.6336449115789666,
+          "mad": 0.07482768177393467,
+          "mad_raw": 0.07482768177393467,
+          "mad_floor": 0.02
+        },
+        "band_frac_0.7_2": {
+          "median": 0.10983299837628344,
+          "mad": 0.03765857361089432,
+          "mad_raw": 0.03765857361089432,
+          "mad_floor": 0.02
+        },
+        "dominant_freq_hz": {
+          "median": 0.19531254074537113,
+          "mad": 0.1171868383177008,
+          "mad_raw": 0.1171868383177008,
+          "mad_floor": 0.02
+        },
+        "util_slope_w_per_pct": {
+          "median": 0.037000000000000324,
+          "mad": 0.05,
+          "mad_raw": 0.021545454545454715,
+          "mad_floor": 0.05
+        },
+        "util_residual_mad_w": {
+          "median": 0.5267000000000017,
+          "mad": 1.0,
+          "mad_raw": 0.19391666666666474,
+          "mad_floor": 1.0
+        },
+        "spectral_entropy": {
+          "median": 0.6243007893315411,
+          "mad": 0.046625145329792894,
+          "mad_raw": 0.046625145329792894,
+          "mad_floor": 0.02
+        },
+        "inst_swing_abs_w": {
+          "median": 13.048149999999996,
+          "mad": 10.0,
+          "mad_raw": 3.0792500000000054,
+          "mad_floor": 10.0
+        },
+        "inst_step_mad_w": {
+          "median": 6.970500000000001,
+          "mad": 5.0,
+          "mad_raw": 2.776250000000001,
+          "mad_floor": 5.0
+        }
+      }
+    },
+    "full:training|high|NVIDIA GeForce RTX 4090": {
+      "n": 465,
+      "n_windows": 465,
+      "n_sessions": 8,
+      "features": {
+        "mean_w": {
+          "median": 295.21596999999997,
+          "mad": 117.50879333333336,
+          "mad_raw": 117.50879333333336,
+          "mad_floor": 14.7607985
+        },
+        "swing_abs_w": {
+          "median": 1.191849999999988,
+          "mad": 5.0,
+          "mad_raw": 0.5095499999999902,
+          "mad_floor": 5.0
+        },
+        "band_frac_0.1_0.7": {
+          "median": 0.5411900772248601,
+          "mad": 0.16414445823755597,
+          "mad_raw": 0.16414445823755597,
+          "mad_floor": 0.02
+        },
+        "band_frac_0.7_2": {
+          "median": 0.06800685492249553,
+          "mad": 0.04994666606479007,
+          "mad_raw": 0.04994666606479007,
+          "mad_floor": 0.02
+        },
+        "dominant_freq_hz": {
+          "median": 0.07812506140913053,
+          "mad": 0.039062548894479424,
+          "mad_raw": 0.039062548894479424,
+          "mad_floor": 0.02
+        },
+        "util_slope_w_per_pct": {
+          "median": 0.07199999999999988,
+          "mad": 0.10600000000000022,
+          "mad_raw": 0.10600000000000022,
+          "mad_floor": 0.05
+        },
+        "util_residual_mad_w": {
+          "median": 0.23099999999999454,
+          "mad": 1.0,
+          "mad_raw": 0.08279999999999177,
+          "mad_floor": 1.0
+        },
+        "spectral_entropy": {
+          "median": 0.4810511828761765,
+          "mad": 0.09092960320296833,
+          "mad_raw": 0.09092960320296833,
+          "mad_floor": 0.02
+        },
+        "inst_swing_abs_w": {
+          "median": 10.888199999999983,
+          "mad": 10.0,
+          "mad_raw": 7.406699999999958,
+          "mad_floor": 10.0
+        },
+        "inst_step_mad_w": {
+          "median": 5.033999999999992,
+          "mad": 5.0,
+          "mad_raw": 3.9809999999999945,
+          "mad_floor": 5.0
+        }
+      }
+    },
+    "full:training|low|NVIDIA GeForce RTX 4090": {
+      "n": 169,
+      "n_windows": 169,
+      "n_sessions": 5,
+      "features": {
+        "mean_w": {
+          "median": 80.29188333333335,
+          "mad": 5.0,
+          "mad_raw": 2.964880000000022,
+          "mad_floor": 5.0
+        },
+        "swing_abs_w": {
+          "median": 24.694850000000017,
+          "mad": 6.995749999999987,
+          "mad_raw": 6.995749999999987,
+          "mad_floor": 5.0
+        },
+        "band_frac_0.1_0.7": {
+          "median": 0.6262658068966069,
+          "mad": 0.06443060568263137,
+          "mad_raw": 0.06443060568263137,
+          "mad_floor": 0.02
+        },
+        "band_frac_0.7_2": {
+          "median": 0.14233885726180998,
+          "mad": 0.03367379616894495,
+          "mad_raw": 0.03367379616894495,
+          "mad_floor": 0.02
+        },
+        "dominant_freq_hz": {
+          "median": 0.19531465079675525,
+          "mad": 0.1171886638733972,
+          "mad_raw": 0.1171886638733972,
+          "mad_floor": 0.02
+        },
+        "util_slope_w_per_pct": {
+          "median": 0.02807317073170757,
+          "mad": 0.05,
+          "mad_raw": 0.031233885017421976,
+          "mad_floor": 0.05
+        },
+        "util_residual_mad_w": {
+          "median": 4.2554915254237216,
+          "mad": 1.5109915254237194,
+          "mad_raw": 1.5109915254237194,
+          "mad_floor": 1.0
+        },
+        "spectral_entropy": {
+          "median": 0.6605768181491464,
+          "mad": 0.03238437181894538,
+          "mad_raw": 0.03238437181894538,
+          "mad_floor": 0.02
+        },
+        "inst_swing_abs_w": {
+          "median": 88.44560000000004,
+          "mad": 23.00960000000002,
+          "mad_raw": 23.00960000000002,
+          "mad_floor": 10.0
+        },
+        "inst_step_mad_w": {
+          "median": 23.212,
+          "mad": 10.593000000000007,
+          "mad_raw": 10.593000000000007,
+          "mad_floor": 5.0
+        }
+      }
+    },
+    "band:inference|low": {
+      "n": 120,
+      "n_windows": 120,
+      "n_sessions": 3,
+      "features": {
+        "mean_w": {
+          "median": 66.142465,
+          "mad": 5.0,
+          "mad_raw": 1.8811766666666614,
+          "mad_floor": 5.0
+        },
+        "swing_abs_w": {
+          "median": 2.7371750000000006,
+          "mad": 5.0,
+          "mad_raw": 0.900425000000002,
+          "mad_floor": 5.0
+        },
+        "band_frac_0.1_0.7": {
+          "median": 0.6336449115789666,
+          "mad": 0.07482768177393467,
+          "mad_raw": 0.07482768177393467,
+          "mad_floor": 0.02
+        },
+        "band_frac_0.7_2": {
+          "median": 0.10983299837628344,
+          "mad": 0.03765857361089432,
+          "mad_raw": 0.03765857361089432,
+          "mad_floor": 0.02
+        },
+        "dominant_freq_hz": {
+          "median": 0.19531254074537113,
+          "mad": 0.1171868383177008,
+          "mad_raw": 0.1171868383177008,
+          "mad_floor": 0.02
+        },
+        "util_slope_w_per_pct": {
+          "median": 0.037000000000000324,
+          "mad": 0.05,
+          "mad_raw": 0.021545454545454715,
+          "mad_floor": 0.05
+        },
+        "util_residual_mad_w": {
+          "median": 0.5267000000000017,
+          "mad": 1.0,
+          "mad_raw": 0.19391666666666474,
+          "mad_floor": 1.0
+        },
+        "spectral_entropy": {
+          "median": 0.6243007893315411,
+          "mad": 0.046625145329792894,
+          "mad_raw": 0.046625145329792894,
+          "mad_floor": 0.02
+        },
+        "inst_swing_abs_w": {
+          "median": 13.048149999999996,
+          "mad": 10.0,
+          "mad_raw": 3.0792500000000054,
+          "mad_floor": 10.0
+        },
+        "inst_step_mad_w": {
+          "median": 6.970500000000001,
+          "mad": 5.0,
+          "mad_raw": 2.776250000000001,
+          "mad_floor": 5.0
+        }
+      }
+    },
+    "band:training|high": {
+      "n": 465,
+      "n_windows": 465,
+      "n_sessions": 8,
+      "features": {
+        "mean_w": {
+          "median": 295.21596999999997,
+          "mad": 117.50879333333336,
+          "mad_raw": 117.50879333333336,
+          "mad_floor": 14.7607985
+        },
+        "swing_abs_w": {
+          "median": 1.191849999999988,
+          "mad": 5.0,
+          "mad_raw": 0.5095499999999902,
+          "mad_floor": 5.0
+        },
+        "band_frac_0.1_0.7": {
+          "median": 0.5411900772248601,
+          "mad": 0.16414445823755597,
+          "mad_raw": 0.16414445823755597,
+          "mad_floor": 0.02
+        },
+        "band_frac_0.7_2": {
+          "median": 0.06800685492249553,
+          "mad": 0.04994666606479007,
+          "mad_raw": 0.04994666606479007,
+          "mad_floor": 0.02
+        },
+        "dominant_freq_hz": {
+          "median": 0.07812506140913053,
+          "mad": 0.039062548894479424,
+          "mad_raw": 0.039062548894479424,
+          "mad_floor": 0.02
+        },
+        "util_slope_w_per_pct": {
+          "median": 0.07199999999999988,
+          "mad": 0.10600000000000022,
+          "mad_raw": 0.10600000000000022,
+          "mad_floor": 0.05
+        },
+        "util_residual_mad_w": {
+          "median": 0.23099999999999454,
+          "mad": 1.0,
+          "mad_raw": 0.08279999999999177,
+          "mad_floor": 1.0
+        },
+        "spectral_entropy": {
+          "median": 0.4810511828761765,
+          "mad": 0.09092960320296833,
+          "mad_raw": 0.09092960320296833,
+          "mad_floor": 0.02
+        },
+        "inst_swing_abs_w": {
+          "median": 10.888199999999983,
+          "mad": 10.0,
+          "mad_raw": 7.406699999999958,
+          "mad_floor": 10.0
+        },
+        "inst_step_mad_w": {
+          "median": 5.033999999999992,
+          "mad": 5.0,
+          "mad_raw": 3.9809999999999945,
+          "mad_floor": 5.0
+        }
+      }
+    },
+    "band:training|low": {
+      "n": 169,
+      "n_windows": 169,
+      "n_sessions": 5,
+      "features": {
+        "mean_w": {
+          "median": 80.29188333333335,
+          "mad": 5.0,
+          "mad_raw": 2.964880000000022,
+          "mad_floor": 5.0
+        },
+        "swing_abs_w": {
+          "median": 24.694850000000017,
+          "mad": 6.995749999999987,
+          "mad_raw": 6.995749999999987,
+          "mad_floor": 5.0
+        },
+        "band_frac_0.1_0.7": {
+          "median": 0.6262658068966069,
+          "mad": 0.06443060568263137,
+          "mad_raw": 0.06443060568263137,
+          "mad_floor": 0.02
+        },
+        "band_frac_0.7_2": {
+          "median": 0.14233885726180998,
+          "mad": 0.03367379616894495,
+          "mad_raw": 0.03367379616894495,
+          "mad_floor": 0.02
+        },
+        "dominant_freq_hz": {
+          "median": 0.19531465079675525,
+          "mad": 0.1171886638733972,
+          "mad_raw": 0.1171886638733972,
+          "mad_floor": 0.02
+        },
+        "util_slope_w_per_pct": {
+          "median": 0.02807317073170757,
+          "mad": 0.05,
+          "mad_raw": 0.031233885017421976,
+          "mad_floor": 0.05
+        },
+        "util_residual_mad_w": {
+          "median": 4.2554915254237216,
+          "mad": 1.5109915254237194,
+          "mad_raw": 1.5109915254237194,
+          "mad_floor": 1.0
+        },
+        "spectral_entropy": {
+          "median": 0.6605768181491464,
+          "mad": 0.03238437181894538,
+          "mad_raw": 0.03238437181894538,
+          "mad_floor": 0.02
+        },
+        "inst_swing_abs_w": {
+          "median": 88.44560000000004,
+          "mad": 23.00960000000002,
+          "mad_raw": 23.00960000000002,
+          "mad_floor": 10.0
+        },
+        "inst_step_mad_w": {
+          "median": 23.212,
+          "mad": 10.593000000000007,
+          "mad_raw": 10.593000000000007,
+          "mad_floor": 5.0
+        }
+      }
+    },
+    "band:training|mid": {
+      "n": 64,
+      "n_windows": 64,
+      "n_sessions": 2,
+      "features": {
+        "mean_w": {
+          "median": 123.72098166666669,
+          "mad": 6.186049083333335,
+          "mad_raw": 2.918053333333333,
+          "mad_floor": 6.186049083333335
+        },
+        "swing_abs_w": {
+          "median": 5.789475000000003,
+          "mad": 5.0,
+          "mad_raw": 4.271049999999988,
+          "mad_floor": 5.0
+        },
+        "band_frac_0.1_0.7": {
+          "median": 0.41715030902408967,
+          "mad": 0.22803893328722352,
+          "mad_raw": 0.22803893328722352,
+          "mad_floor": 0.02
+        },
+        "band_frac_0.7_2": {
+          "median": 0.027098384162035395,
+          "mad": 0.022255870260295997,
+          "mad_raw": 0.022255870260295997,
+          "mad_floor": 0.02
+        },
+        "dominant_freq_hz": {
+          "median": 0.039062559080865186,
+          "mad": 0.02,
+          "mad_raw": 1.0186368817888258e-08,
+          "mad_floor": 0.02
+        },
+        "util_slope_w_per_pct": {
+          "median": 0.7268750000000015,
+          "mad": 0.6009999999999991,
+          "mad_raw": 0.6009999999999991,
+          "mad_floor": 0.05
+        },
+        "util_residual_mad_w": {
+          "median": 0.35812499999999403,
+          "mad": 1.0,
+          "mad_raw": 0.1281249999999865,
+          "mad_floor": 1.0
+        },
+        "spectral_entropy": {
+          "median": 0.41989644012440297,
+          "mad": 0.1563568552134472,
+          "mad_raw": 0.1563568552134472,
+          "mad_floor": 0.02
+        },
+        "inst_swing_abs_w": {
+          "median": 7.521599999999992,
+          "mad": 10.0,
+          "mad_raw": 2.9736000000000047,
+          "mad_floor": 10.0
+        },
+        "inst_step_mad_w": {
+          "median": 1.1740000000000101,
+          "mad": 5.0,
+          "mad_raw": 0.5899999999999928,
+          "mad_floor": 5.0
+        }
+      }
+    },
+    "family:inference": {
+      "n": 120,
+      "n_windows": 120,
+      "n_sessions": 3,
+      "features": {
+        "mean_w": {
+          "median": 66.142465,
+          "mad": 5.0,
+          "mad_raw": 1.8811766666666614,
+          "mad_floor": 5.0
+        },
+        "swing_abs_w": {
+          "median": 2.7371750000000006,
+          "mad": 5.0,
+          "mad_raw": 0.900425000000002,
+          "mad_floor": 5.0
+        },
+        "band_frac_0.1_0.7": {
+          "median": 0.6336449115789666,
+          "mad": 0.07482768177393467,
+          "mad_raw": 0.07482768177393467,
+          "mad_floor": 0.02
+        },
+        "band_frac_0.7_2": {
+          "median": 0.10983299837628344,
+          "mad": 0.03765857361089432,
+          "mad_raw": 0.03765857361089432,
+          "mad_floor": 0.02
+        },
+        "dominant_freq_hz": {
+          "median": 0.19531254074537113,
+          "mad": 0.1171868383177008,
+          "mad_raw": 0.1171868383177008,
+          "mad_floor": 0.02
+        },
+        "util_slope_w_per_pct": {
+          "median": 0.037000000000000324,
+          "mad": 0.05,
+          "mad_raw": 0.021545454545454715,
+          "mad_floor": 0.05
+        },
+        "util_residual_mad_w": {
+          "median": 0.5267000000000017,
+          "mad": 1.0,
+          "mad_raw": 0.19391666666666474,
+          "mad_floor": 1.0
+        },
+        "spectral_entropy": {
+          "median": 0.6243007893315411,
+          "mad": 0.046625145329792894,
+          "mad_raw": 0.046625145329792894,
+          "mad_floor": 0.02
+        },
+        "inst_swing_abs_w": {
+          "median": 13.048149999999996,
+          "mad": 10.0,
+          "mad_raw": 3.0792500000000054,
+          "mad_floor": 10.0
+        },
+        "inst_step_mad_w": {
+          "median": 6.970500000000001,
+          "mad": 5.0,
+          "mad_raw": 2.776250000000001,
+          "mad_floor": 5.0
+        }
+      }
+    },
+    "family:training": {
+      "n": 698,
+      "n_windows": 698,
+      "n_sessions": 15,
+      "features": {
+        "mean_w": {
+          "median": 117.91320666666665,
+          "mad": 38.96842499999999,
+          "mad_raw": 38.96842499999999,
+          "mad_floor": 5.895660333333333
+        },
+        "swing_abs_w": {
+          "median": 6.119025000000008,
+          "mad": 5.307525000000005,
+          "mad_raw": 5.307525000000005,
+          "mad_floor": 5.0
+        },
+        "band_frac_0.1_0.7": {
+          "median": 0.573863329289867,
+          "mad": 0.13521340557037279,
+          "mad_raw": 0.13521340557037279,
+          "mad_floor": 0.02
+        },
+        "band_frac_0.7_2": {
+          "median": 0.09162951464701652,
+          "mad": 0.05143141117887423,
+          "mad_raw": 0.05143141117887423,
+          "mad_floor": 0.02
+        },
+        "dominant_freq_hz": {
+          "median": 0.07812705727309191,
+          "mad": 0.039064543303248295,
+          "mad_raw": 0.039064543303248295,
+          "mad_floor": 0.02
+        },
+        "util_slope_w_per_pct": {
+          "median": 0.06140625000000344,
+          "mad": 0.06485869565217389,
+          "mad_raw": 0.06485869565217389,
+          "mad_floor": 0.05
+        },
+        "util_residual_mad_w": {
+          "median": 0.3622499999999924,
+          "mad": 1.0,
+          "mad_raw": 0.23149999999999338,
+          "mad_floor": 1.0
+        },
+        "spectral_entropy": {
+          "median": 0.5403607929718146,
+          "mad": 0.10802046174385116,
+          "mad_raw": 0.10802046174385116,
+          "mad_floor": 0.02
+        },
+        "inst_swing_abs_w": {
+          "median": 16.315900000000028,
+          "mad": 15.092650000000027,
+          "mad_raw": 15.092650000000027,
+          "mad_floor": 10.0
+        },
+        "inst_step_mad_w": {
+          "median": 5.539500000000004,
+          "mad": 5.0425,
+          "mad_raw": 5.0425,
+          "mad_floor": 5.0
+        }
+      }
+    },
+    "global": {
+      "n": 858,
+      "n_windows": 858,
+      "n_sessions": 19,
+      "features": {
+        "mean_w": {
+          "median": 112.39252333333334,
+          "mad": 34.64424,
+          "mad_raw": 34.64424,
+          "mad_floor": 5.619626166666667
+        },
+        "swing_abs_w": {
+          "median": 3.2349749999999986,
+          "mad": 5.0,
+          "mad_raw": 2.587525000000035,
+          "mad_floor": 5.0
+        },
+        "band_frac_0.1_0.7": {
+          "median": 0.5867677595191865,
+          "mad": 0.129402873547017,
+          "mad_raw": 0.129402873547017,
+          "mad_floor": 0.02
+        },
+        "band_frac_0.7_2": {
+          "median": 0.09162951464701652,
+          "mad": 0.05043336313246918,
+          "mad_raw": 0.05043336313246918,
+          "mad_floor": 0.02
+        },
+        "dominant_freq_hz": {
+          "median": 0.11718752444722269,
+          "mad": 0.07812500065482558,
+          "mad_raw": 0.07812500065482558,
+          "mad_floor": 0.02
+        },
+        "util_slope_w_per_pct": {
+          "median": 0.06287500000000001,
+          "mad": 0.06407500000000006,
+          "mad_raw": 0.06407500000000006,
+          "mad_floor": 0.05
+        },
+        "util_residual_mad_w": {
+          "median": 0.46575000000000344,
+          "mad": 1.0,
+          "mad_raw": 0.31224999999999525,
+          "mad_floor": 1.0
+        },
+        "spectral_entropy": {
+          "median": 0.5606729792774905,
+          "mad": 0.09946876703875018,
+          "mad_raw": 0.09946876703875018,
+          "mad_floor": 0.02
+        },
+        "inst_swing_abs_w": {
+          "median": 14.515349999999998,
+          "mad": 11.271899999999988,
+          "mad_raw": 11.271899999999988,
+          "mad_floor": 10.0
+        },
+        "inst_step_mad_w": {
+          "median": 5.408000000000001,
+          "mad": 5.0,
+          "mad_raw": 4.486000000000001,
+          "mad_floor": 5.0
+        }
+      }
+    }
+  }
+}

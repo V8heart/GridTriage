@@ -1,6 +1,7 @@
 """CPU tests for GPT model and workload CLIs."""
 from __future__ import annotations
 
+from pathlib import Path
 import subprocess
 import sys
 
@@ -37,7 +38,7 @@ def test_gpt_tiny_cpu_forward_and_param_count():
 def test_workload_modules_help(module):
     proc = subprocess.run(
         [sys.executable, "-m", module, "--help"],
-        cwd="/home/agew1597/KDN",
+        cwd=str(Path(__file__).resolve().parents[1]),
         capture_output=True,
         text=True,
         check=False,

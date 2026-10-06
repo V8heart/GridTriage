@@ -4,7 +4,9 @@ A source yields one telemetry row per GPU per tick. Every ``stride_s`` of data
 time the engine scores the latest ``window_s`` window per GPU with the frozen
 Stage1 model. When a GPU has ``trigger_windows`` consecutive candidate
 windows, the candidate run is summarised into an evidence bundle and sent to
-retrieval + LLM judgment on a worker thread. The UI only reads ``snapshot()``.
+retrieval + LLM judgment on a worker thread. The first time a run raises the
+alarm, its power waveform is also replayed on a public test system (physics
+bridge, own worker thread, optional). The UI only reads ``snapshot()``.
 
 Sources:
   NvmlSource    polls NVML directly (power average + instant, util, processes)
@@ -24,6 +26,7 @@ import pandas as pd
 
 from dataset.declared_context import DECLARED_POOL
 from dataset.recover_instant_power import recover_power_instant
+from pipeline.physics_bridge import PhysicsSettings, replay
 from pipeline.stage1_v2 import build_windows, score_window
 from pipeline.v4_core import ROOT, Stage1Model, analyze_segment, load_stage1, segment_bundle, session_gate_windows
 
@@ -127,6 +130,7 @@ class EngineSettings:
     k: int = 8
     ollama_host: str | None = None
     buffer_s: float = 900.0
+    physics: PhysicsSettings | None = None  # None = no physics replay
 
 
 @dataclass
@@ -134,7 +138,9 @@ class EngineState:
     rows: dict[int, deque] = field(default_factory=dict)
     windows: list[dict] = field(default_factory=list)
     analyses: list[dict] = field(default_factory=list)
+    physics: dict[str, dict] = field(default_factory=dict)  # alarm_id -> replay result (or {"status": "running"})
     pending: int = 0
+    pending_alarms: dict[str, int] = field(default_factory=dict)  # alarm_id -> gpu, judgment in flight
     error: str | None = None
 
 
@@ -148,6 +154,8 @@ class LiveEngine:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._pool = ThreadPoolExecutor(max_workers=1)
+        self._physics_pool = ThreadPoolExecutor(max_workers=1)
+        self.physics_runner = None  # tests replace the subprocess
         self._next_score_t: float | None = None
         self._runs: dict[int, list[dict]] = {}
         self._thread: threading.Thread | None = None
@@ -236,13 +244,45 @@ class LiveEngine:
         trig, every = self.settings.trigger_windows, self.settings.reanalyze_every
         if n == trig or (n > trig and (n - trig) % every == 0):
             self._submit(gpu, list(run))
+        if n == trig and self.settings.physics and self.settings.physics.enabled:
+            self._submit_physics(gpu, list(run))
+
+    @staticmethod
+    def alarm_id(gpu: int, run: list[dict]) -> str:
+        return f"{gpu}:{run[0]['t_end']:.1f}"
+
+    def run_waveform(self, gpu: int, run: list[dict]) -> tuple[np.ndarray, float]:
+        """Power over the alarmed run (instant power when recorded), and its sample rate."""
+        t0, t1 = run[0]["t_end"] - self.settings.window_s, run[-1]["t_end"]
+        with self._lock:
+            rows = [r for r in self.state.rows.get(gpu, ()) if t0 <= r["t_epoch"] <= t1]
+        frame = pd.DataFrame(rows)
+        inst = frame["power_instant_w"] if "power_instant_w" in frame else pd.Series(dtype=float)
+        power = inst if inst.notna().mean() > 0.8 else frame["power_w"]
+        hz = 1.0 / max(float(frame["t_epoch"].diff().median()), 1e-3)
+        return power.interpolate(limit_direction="both").to_numpy(dtype=float), hz
+
+    def _submit_physics(self, gpu: int, run: list[dict]) -> None:
+        aid = self.alarm_id(gpu, run)
+        power, hz = self.run_waveform(gpu, run)
+        with self._lock:
+            self.state.physics[aid] = {"status": "running"}
+
+        def task():
+            result = replay(power, hz, self.settings.physics, runner=self.physics_runner)
+            with self._lock:
+                self.state.physics[aid] = {"status": "done", **result}
+
+        self._physics_pool.submit(task)
 
     def _submit(self, gpu: int, run: list[dict]) -> None:
         part = pd.DataFrame([{**r["window_row"], "u_score": r["u_score"], "p_value": r["p_value"],
                               "evidence_bool": r["evidence_bool"]} for r in run])
         seg = segment_bundle(part, self.stage1.config)
+        aid = self.alarm_id(gpu, run)
         with self._lock:
             self.state.pending += 1
+            self.state.pending_alarms[aid] = gpu
 
         def task():
             st = self.settings
@@ -252,10 +292,11 @@ class LiveEngine:
             except Exception as exc:
                 result = {"query": None, "hits": [], "judgment": {"verdict": "invalid", "errors": [str(exc)]}}
             result.update(gpu_id=gpu, t_start=run[0]["t_end"] - st.window_s, t_end=run[-1]["t_end"],
-                          n_windows=len(run), bundle=seg["bundle"])
+                          n_windows=len(run), bundle=seg["bundle"], alarm_id=self.alarm_id(gpu, run))
             with self._lock:
                 self.state.analyses.append(result)
                 self.state.pending -= 1
+                self.state.pending_alarms.pop(aid, None)
 
         self._pool.submit(task)
 
@@ -264,7 +305,10 @@ class LiveEngine:
         with self._lock:
             rows = {g: list(buf) for g, buf in self.state.rows.items()}
             return {"rows": rows, "windows": list(self.state.windows), "analyses": list(self.state.analyses),
-                    "pending": self.state.pending, "error": self.state.error,
+                    "physics": dict(self.state.physics), "pending": self.state.pending,
+                    "pending_alarms": dict(self.state.pending_alarms),
+                    "run_len": {g: len(r) for g, r in self._runs.items()},
+                    "trigger_windows": self.settings.trigger_windows, "error": self.state.error,
                     "source": getattr(self.source, "label", ""), "stage1": self.stage1.name}
 
 

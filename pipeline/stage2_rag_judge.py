@@ -5,6 +5,11 @@ retrieved documents and returns the final verdict. No attack probability is
 produced. The LLM may only name a threat card that was retrieved (candidate
 constraint, cf. TechniqueRAG), and must cite retrieved doc_ids and evidence
 names that exist in the bundle; violations trigger one retry, then ``invalid``.
+A deterministic requirement gate then checks the chosen threat card against the
+bundle: a required evidence that is off, or an exclusion evidence that is on,
+turns ``attack`` into ``unknown`` (the research trigger), since the LLM tends
+to force an unknown threat onto the nearest known card. Off by default: the approved
+cards' required evidence does not yet match real captures (RESULTS_v4.md §6).
 """
 from __future__ import annotations
 
@@ -58,6 +63,7 @@ class Judgment:
     model: str = ""
     latency_s: float = 0.0
     attempts: int = 1
+    gate: dict | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -160,7 +166,7 @@ def validate(raw: dict, *, cards: list[str], doc_ids: set[str], evidence_names: 
 
 
 def judge(bundle: dict, docs: list[dict], *, model: str = "gemma3:12b", all_cards: list[str] | None = None,
-          show_docs: bool = True, retries: int = 1, host: str | None = None) -> Judgment:
+          show_docs: bool = True, retries: int = 1, host: str | None = None, gate: bool = False) -> Judgment:
     cards = allowed_cards(docs, all_cards)
     doc_ids = {d["doc_id"] for d in docs} if show_docs else set()
     pattern = bundle.get("pattern") or {}
@@ -183,7 +189,21 @@ def judge(bundle: dict, docs: list[dict], *, model: str = "gemma3:12b", all_card
     result.latency_s = round(time.monotonic() - started, 2)
     if not result.valid:
         result.verdict = "invalid"
+    elif gate and result.verdict == "attack":
+        result.gate = requirement_gate(result.threat_card, docs, evidence)
+        if result.gate:
+            result.verdict, result.threat_card = "unknown", None
     return result
+
+
+def requirement_gate(card: str | None, docs: list[dict], evidence: dict) -> dict | None:
+    """Reasons the chosen card contradicts the bundle, or None when it holds (or carries no rules)."""
+    rules = next((d for d in docs if d.get("card") == card and "requires" in d), None)
+    if rules is None:
+        return None
+    missing = [e for e in rules["requires"] if not evidence.get(e)]
+    excluded = [e for e in rules["excludes"] if evidence.get(e)]
+    return {"card": card, "missing_required": missing, "exclusion_on": excluded} if missing or excluded else None
 
 
 def is_correct(judgment: Judgment | dict, gt_card: str, accept: list[str]) -> bool:

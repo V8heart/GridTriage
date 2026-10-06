@@ -1,0 +1,30 @@
+# GridPulse main environment (.venv) — Python 3.10, versions as validated on the reference server
+# (Ubuntu 22.04, CUDA 13.0, RTX 4090 x2). Physics (ANDES) uses a separate Python 3.11 env:
+# requirements-physics.txt / setup_physics_env.sh.
+#
+# torch: the reference build is 2.14.0+cu130. On another CUDA version install the matching
+# wheel from https://pytorch.org/get-started/locally/ first, then `pip install -r requirements.txt`.
+
+# core pipeline
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+scikit-learn==1.7.2
+PyYAML==6.0.3
+
+# telemetry collection (NVML)
+nvidia-ml-py==13.610.43
+
+# Stage 2 retrieval: BM25 + bge-m3 dense + bge-reranker-v2-m3
+rank-bm25==0.2.2
+sentence-transformers==6.0.1
+transformers==5.16.1
+huggingface_hub==1.30.0
+torch==2.14.0
+
+# console
+streamlit==1.64.0
+plotly==7.1.0
+
+# tests
+pytest==9.1.1

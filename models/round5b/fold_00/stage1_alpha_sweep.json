@@ -1,0 +1,79 @@
+{
+  "fit_split": "cal",
+  "u_score_auc_overall": 0.9877696456086287,
+  "u_score_auc_by_label": {
+    "cryptojacking": {
+      "auc": 0.9907871083718541,
+      "n": 96,
+      "root_cause": "alpha_may_help"
+    },
+    "swma": {
+      "auc": 0.9869075133905643,
+      "n": 336,
+      "root_cause": "alpha_may_help"
+    }
+  },
+  "alpha_sweep": [
+    {
+      "alpha": 0.05,
+      "cal_normal_candidate_rate": 0.025423728813559324,
+      "cal_cohort_weighted_fp": 0.0790979993170018,
+      "cal_attack_recall": 0.8449074074074074,
+      "cal_detectable_recall": 0.9891304347826086,
+      "fit_target_normal_fp": 0.0912672357189757,
+      "substituted_from_train": [
+        "interactive|low",
+        "training|low"
+      ]
+    },
+    {
+      "alpha": 0.1,
+      "cal_normal_candidate_rate": 0.05624036979969183,
+      "cal_cohort_weighted_fp": 0.16445996813214558,
+      "cal_attack_recall": 0.9930555555555556,
+      "cal_detectable_recall": 0.9945652173913043,
+      "fit_target_normal_fp": 0.24622455679579777,
+      "substituted_from_train": [
+        "interactive|low",
+        "training|low"
+      ]
+    },
+    {
+      "alpha": 0.2,
+      "cal_normal_candidate_rate": 0.10631741140215717,
+      "cal_cohort_weighted_fp": 0.25645518016505253,
+      "cal_attack_recall": 0.9953703703703703,
+      "cal_detectable_recall": 1.0,
+      "fit_target_normal_fp": 0.35784635587655944,
+      "substituted_from_train": [
+        "interactive|low",
+        "training|low"
+      ]
+    }
+  ],
+  "selection_rule": "cal_cohort_weighted_fp <= 0.10, maximize attack recall; tie -> smaller alpha; alpha_high_impact = alpha (no impact relaxation); missing cal cohorts substituted from train",
+  "selection_failed": false,
+  "selected_alpha": {
+    "alpha": 0.05,
+    "cal_normal_candidate_rate": 0.025423728813559324,
+    "cal_cohort_weighted_fp": 0.0790979993170018,
+    "cal_attack_recall": 0.8449074074074074,
+    "cal_detectable_recall": 0.9891304347826086,
+    "fit_target_normal_fp": 0.0912672357189757,
+    "substituted_from_train": [
+      "interactive|low",
+      "training|low"
+    ]
+  },
+  "alpha_stepdown": {
+    "applied": false,
+    "cal_cohort_weighted_fp": 0.0790979993170018,
+    "fit_target_normal_fp": 0.0912672357189757
+  },
+  "missing_cal_cohorts": [
+    "interactive|low",
+    "training|low"
+  ],
+  "limitation": "Under conformal scoring, FPR often tracks alpha; low-AUC classes need feature/evidence work, not alpha alone.",
+  "test_sealed": true
+}

@@ -1,0 +1,9 @@
+{
+ "statistic": "R (longest run of consecutive Stage1 candidate windows)",
+ "alpha": 0.1,
+ "min_run_windows": 5,
+ "n_normal_sessions": 58,
+ "stage1": "round5b",
+ "calibration": "cross-conformal over round5b fold test splits (out-of-fold sessions)",
+ "oof_normal_alarm": 0.052
+}

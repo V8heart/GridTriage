@@ -586,6 +586,29 @@ def power_series_to_relative_events(
     return events, meta
 
 
+FACILITY_BUS_CAP = 0.9  # PQ load may not swing below 10% of its base (TDS stability)
+
+
+def facility_bus_fraction(power_series: np.ndarray, *, p0_bus: float, p_system: float, tdp_w: float,
+                          participation: float, facility_share: float) -> tuple[np.ndarray, dict[str, Any]]:
+    """Per-sample relative change of one PQ load for a facility of ``facility_share`` of system load."""
+    power = np.asarray(power_series, dtype=float)
+    power = power[np.isfinite(power)]
+    pu = (power - power.mean()) / float(tdp_w)
+    system_frac = pu * float(participation) * float(facility_share)
+    bus = system_frac * float(p_system) / float(p0_bus)
+    clipped = bool(np.max(np.abs(bus)) > FACILITY_BUS_CAP)
+    return np.clip(bus, -FACILITY_BUS_CAP, FACILITY_BUS_CAP), {
+        "scale": "facility",
+        "gpu_pu_peak": float(np.max(np.abs(pu))),
+        "injected_frac_of_system_load": float(np.max(np.abs(system_frac))),
+        "bus_frac_peak": float(min(np.max(np.abs(bus)), FACILITY_BUS_CAP)),
+        "participation": float(participation),
+        "facility_share": float(facility_share),
+        "clipped": clipped,
+    }
+
+
 def inject_observed_waveform(
     power_series: np.ndarray,
     sample_hz: float,
@@ -595,12 +618,18 @@ def inject_observed_waveform(
     min_interval_s: float = 0.1,
     max_chunk_s: float = 0.5,
     criteria: int = 1,
+    facility: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Replay an observed power(t) window onto PQ.Ppf of a public test system.
 
     Unlike fixed AttackProfile square/ramp generators, this path does not invent
     a synthetic frequency/amplitude scenario. It replays the candidate window
     shape as a relative load modulation on Kundur/WECC.
+
+    ``facility`` = {"tdp_w", "participation", "facility_share"} scales the shape by
+    ΔP/P_system = (ΔP_GPU/TDP) × participation × (P_facility/P_system), the rule of
+    the project brief §4.1.5, then converts it to the selected PQ bus. Without it the
+    window is normalised to its own mean and capped at ``max_amp_frac`` (legacy).
     """
     if test_system == "kundur_ieeest":
         builder, model_name, pq_selection = build_kundur_system, "GENROU", "first"
@@ -608,13 +637,6 @@ def inject_observed_waveform(
         builder, model_name, pq_selection = build_wecc_system, "GENCLS", "largest_p0"
     else:
         raise ValueError(f"unsupported test_system: {test_system}")
-
-    events, meta = power_series_to_relative_events(
-        power_series,
-        sample_hz,
-        max_amp_frac=max_amp_frac,
-        min_interval_s=min_interval_s,
-    )
 
     ss = builder()
     ss.TDS.config.criteria = criteria
@@ -626,6 +648,20 @@ def inject_observed_waveform(
     selected_pq = select_pq_idx(ss, strategy=pq_selection)
     p0 = float(ss.PQ.get(src="p0", idx=selected_pq, attr="v"))
     pq_bus = str(ss.PQ.get(src="bus", idx=selected_pq, attr="v"))
+
+    scaling: dict[str, Any] = {"scale": "window"}
+    series, cap = power_series, max_amp_frac
+    if facility:
+        total = float(np.sum(np.asarray(ss.PQ.p0.v, dtype=float)))
+        bus_frac, scaling = facility_bus_fraction(power_series, p0_bus=p0, p_system=total, **facility)
+        series, cap = 1.0 + bus_frac, FACILITY_BUS_CAP
+    events, meta = power_series_to_relative_events(
+        series,
+        sample_hz,
+        max_amp_frac=cap,
+        min_interval_s=min_interval_s,
+    )
+    meta.update({k: v for k, v in scaling.items() if isinstance(v, (int, float))})
 
     for t_s, relative_delta in events:
         ok, _, reason = run_to(ss, t_s, max_chunk_s=max_chunk_s)
@@ -670,6 +706,7 @@ def inject_observed_waveform(
         "converged": True,
         "failure_reason": "",
         "t_reached_s": current_time(ss),
+        "scaling": scaling,
         **features,
         **{f"waveform_{k}": v for k, v in meta.items()},
     }
@@ -682,6 +719,7 @@ def inject_observed_waveform_with_timeout(
     timeout_s: float = 60.0,
     test_system: str = "kundur_ieeest",
     max_amp_frac: float = 0.15,
+    facility: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Run observed-waveform injection with a wall-clock timeout.
 
@@ -703,6 +741,7 @@ def inject_observed_waveform_with_timeout(
             sample_hz,
             test_system=test_system,
             max_amp_frac=max_amp_frac,
+            facility=facility,
         )
     except _PhysicsTimeout as exc:
         return {

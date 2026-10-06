@@ -37,6 +37,20 @@ PHRASES = {
     "peak": "뚜렷한 스펙트럼 첨두 (strong spectral peak)",
 }
 
+# Evidence name -> PHRASES key, in rendering order (also used to write research draft signatures).
+EVIDENCE_PHRASES = (
+    ("sustained_high_load", "sustained"),
+    ("inst_power_unsteady", "inst"),
+    ("high_ramp", "ramp"),
+    ("util_power_decoupled", "decoupled"),
+    ("cross_job_sync", "sync"),
+    ("log_period_mismatch", "log_mismatch"),
+    ("period_match", "log_match"),
+    ("declared_family_mismatch", "declared_mismatch"),
+    ("unexplained_changepoint", "changepoint"),
+    ("strong_peak", "peak"),
+)
+
 # Cuts in W / Hz. TDP of the RTX 4090 is 450 W.
 SQUARE_SWING_W = 100.0
 MIN_EVIDENCE_WEIGHT = 1.0
@@ -49,8 +63,11 @@ OBSERVABLE_MAX_HZ = 1.0  # ~2 Hz NVML refresh -> Nyquist ~1 Hz
 
 # Benign evidence has surprisal weight 0 by construction but is the main normal cue.
 ALWAYS_RENDER = frozenset({"period_match"})
-OFFICIAL_CALIBRATION = (Path(__file__).resolve().parents[2] / "dataset" / "real" / "pipeline" / "refit"
-                        / "round5b" / "fold_00" / "stage1_v2_calibration.json")
+_ROOT = Path(__file__).resolve().parents[2]
+_CAL = Path("round5b") / "fold_00" / "stage1_v2_calibration.json"
+# Local refit when present, else the frozen copy committed under models/ (same file).
+OFFICIAL_CALIBRATION = next((p for p in (_ROOT / "dataset/real/pipeline/refit" / _CAL, _ROOT / "models" / _CAL)
+                             if p.exists()), _ROOT / "models" / _CAL)
 
 
 @functools.lru_cache(maxsize=1)
@@ -95,18 +112,7 @@ def render_query(bundle: dict, weights: dict | None | str = "official") -> str:
             parts.append(PHRASES["flat_high"])
         elif mean_w <= LOW_POWER_W:
             parts.append(PHRASES["low_power"])
-    for key, phrase in (
-        ("sustained_high_load", "sustained"),
-        ("inst_power_unsteady", "inst"),
-        ("high_ramp", "ramp"),
-        ("util_power_decoupled", "decoupled"),
-        ("cross_job_sync", "sync"),
-        ("log_period_mismatch", "log_mismatch"),
-        ("period_match", "log_match"),
-        ("declared_family_mismatch", "declared_mismatch"),
-        ("unexplained_changepoint", "changepoint"),
-        ("strong_peak", "peak"),
-    ):
+    for key, phrase in EVIDENCE_PHRASES:
         keep = weights is None or key in ALWAYS_RENDER or key not in weights or weights[key] >= MIN_EVIDENCE_WEIGHT
         if evidence.get(key) and keep:
             parts.append(PHRASES[phrase])

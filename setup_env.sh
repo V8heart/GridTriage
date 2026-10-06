@@ -8,24 +8,19 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 
-echo "=== [2/4] 코어 의존성 설치 ==="
-# 파이프라인 코어 (탐지/분석). 무거운 딥러닝 없이 동작하는 최소 세트.
-pip install numpy pandas scipy scikit-learn pytest
+echo "=== [2/4] 의존성 설치 (requirements.txt, 버전 고정) ==="
+# torch는 CUDA 버전별 빌드가 다르다. 기준 서버는 2.14.0+cu130.
+# 다른 CUDA라면 https://pytorch.org/get-started/locally/ 의 명령으로 torch를 먼저 설치한 뒤 진행한다.
+pip install -r requirements.txt
 
-echo "=== [3/4] 텔레메트리 수집용 ==="
-pip install nvidia-ml-py    # pynvml (NVML 폴링)
+echo "=== [3/4] 위협 지식베이스 원본 받기 + 구축 (ATT&CK 19.2, ATLAS 5.6.0) ==="
+bash scripts/fetch_kb_sources.sh
+python -m pipeline.kb.build_kb
 
-echo "=== [4/4] RAG + 경량 LLM용 ==="
-# 임베딩 검색: faiss-cpu(가벼움) + sentence-transformers
-pip install faiss-cpu sentence-transformers
-
-# 로컬 LLM 서빙 옵션 (둘 중 택1, 나중에 교체 가능):
-#  (A) Ollama 사용 시: 이 스크립트 밖에서 `curl -fsSL https://ollama.com/install.sh | sh`
-#      후 `ollama pull gemma3:12b`. rag_analyzer.py는 기본적으로 Ollama HTTP를 호출.
-#  (B) transformers 직접 사용 시 아래 주석 해제:
-# pip install torch transformers accelerate
-# 실측 워크로드에는 CUDA 지원 PyTorch가 필요하다. 서버별 CUDA 버전에 맞는
-# 설치 명령은 https://pytorch.org/get-started/locally/ 에서 확인한다.
+echo "=== [4/4] 로컬 LLM ==="
+# Ollama 설치: https://ollama.com (이 스크립트 밖에서) 후
+#   ollama pull gemma3:12b
+# 검색 모델(bge-m3, bge-reranker-v2-m3)은 첫 실행 때 Hugging Face에서 자동으로 받는다.
 
 echo ""
 echo "=== 완료 ==="

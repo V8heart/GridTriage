@@ -39,6 +39,13 @@ def _draft_card(path: Path):
     return SimpleNamespace(name=path.stem, category=meta.get("category", "cyber_physical_attack"), body=body, meta=meta)
 
 
+def card_rules(meta: dict) -> dict:
+    """Required / exclusion evidence names, carried on every card doc for the judge's requirement gate."""
+    evidence = [e for e in meta.get("evidence") or [] if isinstance(e, dict) and e.get("name")]
+    return {"requires": sorted(e["name"] for e in evidence if e.get("necessity") == "required"),
+            "excludes": sorted(e["name"] for e in evidence if e.get("necessity") == "exclusion")}
+
+
 def card_docs(corpus_dir: Path, *, exclude: tuple[str, ...] = (), drafts_dir: Path | None = None,
               with_profiles: bool = False) -> list[dict]:
     from pipeline.corpus_schema import parse_corpus_v2
@@ -52,6 +59,7 @@ def card_docs(corpus_dir: Path, *, exclude: tuple[str, ...] = (), drafts_dir: Pa
         sections = re.split(r"^## ", card.body, flags=re.M)
         title = sections[0].strip().splitlines()[0].lstrip("# ").strip() if sections[0].strip() else card.name
         profile = card.meta.get("profile")
+        rules = card_rules(card.meta)
         # Slot profiles were not adopted for judgment (RESULTS_v4.md §5.2); index them only on request.
         if profile and with_profiles:
             from pipeline.kb.profile import render_card_profile
@@ -81,6 +89,7 @@ def card_docs(corpus_dir: Path, *, exclude: tuple[str, ...] = (), drafts_dir: Pa
                 "title": f"{title} — {heading.strip()}",
                 "text": text,
                 "attack_ids": list(card.meta.get("attack_ids") or []),
+                **rules,
             })
     return docs
 

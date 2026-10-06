@@ -20,13 +20,20 @@
 NVML 텔레메트리 (gp-telemetry/1.2)
    ↓
 [Stage1 v2] 30s 창 / 15s stride. 선언 코호트 robust-z + Mondrian conformal.
-            idle 게이트. 의심 후보만 통과
-   ↓ (후보만)
-[Stage2 v2] structured evidence bundle → RAG 시그니처 대조 → LLM 판정
-            `--stage2 none` 이면 Stage1 envelope만 저장
+            idle 게이트, 순시 전력(power_instant_w) 증거. 의심 후보만 통과
+   ↓ 후보 창이 연속 5개(세션 단위 보정 게이트) 이상인 구간만
+[Stage2 v4] evidence bundle → 시그니처 질의 → KB 1,091건 하이브리드 검색(BM25 + bge-m3)
+            + bge-reranker 재정렬 → LLM(gemma3:12b) 판정 + 인용·증거 검증
 ```
 
-레거시 `--stage1 legacy`는 창 변동폭 z-score 스크리닝이다. 현재 공식 경로는 `--stage1 v2`.
+실측 공식 경로는 `pipeline/v4_core.py`(일괄·재생·실시간 공유)이며, `run_pipeline.py`의
+`--stage2 v2`는 합성 평가용 이전 경로다. 레거시 `--stage1 legacy`는 창 변동폭 z-score 스크리닝이다.
+
+## 저장소에 포함된 것과 빠진 것
+
+- **포함:** 코드, 위협 카드(`corpus/`), 공식 Stage 1 모델 고정본(`models/`, 통계값만), 그림(`docs/figures/`), 수전점 계측 예시(`examples/grid/`, 합성)
+- **빠짐(git 제외):** 실측 캡처(`dataset/real/`), ATT&CK·ATLAS 원본(`dataset/kb/raw/`, `scripts/fetch_kb_sources.sh`로 받음)
+- 실측 캡처 없이도 콘솔(Live)·판정 경로·테스트가 동작한다. 재학습·평가 스크립트는 `dataset/real/`이 있어야 한다.
 
 ## 서버 요구사항 (검증된 환경)
 
@@ -36,8 +43,9 @@ NVML 텔레메트리 (gp-telemetry/1.2)
 ## 설치 및 실행
 
 ```bash
-bash setup_env.sh
+bash setup_env.sh          # requirements.txt 설치 + ATT&CK·ATLAS 원본 받기(체크섬 검증) + KB 구축(1,091건)
 source .venv/bin/activate
+.venv/bin/streamlit run app.py   # 콘솔. 저장 세션(dataset/real)이 없으면 Live 모드로 시작
 
 # (선택) 로컬 LLM: 이 서버에는 Ollama 0.32.1이 이미 설치되어 있음
 #   ollama serve   # 미실행 시
@@ -157,10 +165,14 @@ Idle 게이트 (관측만, 라벨 미사용):
 - `n_procs == 0` 이고 `mean_w ≤ 40` → 후보 제외 (`idle`)
 - `n_procs == 0` 이고 고전력 → `undeclared_load` (후보)
 
-실측 적합 산출물(round3, fold_00, seed 7):
+실측 공식 적합 산출물은 **round5b / fold_00** 이다(`pipeline/v4_core.py`의 `OFFICIAL_STAGE1`).
+round5b는 순시 전력 피처(`inst_*`)를 evidence 전용으로 쓰며, `inst_power_unsteady`는
+train 정상 코호트 z의 q99에서 켜진다.
 
-- 리포트: [`dataset/real/pipeline/refit/round3/stage1_report.md`](dataset/real/pipeline/refit/round3/stage1_report.md)
-- baseline / calibration: `dataset/real/pipeline/refit/round3/fold_00/`
+- 리포트: `dataset/real/pipeline/refit/round5b/stage1_report.md`
+- baseline / calibration: `dataset/real/pipeline/refit/round5b/fold_00/`
+- 세션 게이트: `dataset/real/pipeline/refit/session_gate.json` (`pipeline/session_calibration.py`가
+  세 fold OOF로 정상 세션 경보 ≤ 0.10이 되는 최소 연속 창 수를 기록, 현재 5). 파일이 없으면 4로 폴백.
 - alpha는 cal만. 세션 가중 정상 오탐 ≤ 0.10, 공격 recall 최대, 동점이면 작은 alpha.
   결측 cal 코호트는 같은 코호트 train 오탐으로 대체. test로 alpha/강등하지 않음.
 
@@ -169,12 +181,56 @@ python pipeline/run_pipeline.py \
   --telemetry dataset/real/pipeline/telemetry_with_procs.csv \
   --stage1 v2 --stage2 none \
   --stage1-config config/stage1_v2_real.yaml \
-  --baseline-model dataset/real/pipeline/refit/round3/fold_00/cohort_baseline_v2.json \
-  --calibration dataset/real/pipeline/refit/round3/fold_00/stage1_v2_calibration.json \
+  --baseline-model dataset/real/pipeline/refit/round5b/fold_00/cohort_baseline_v2.json \
+  --calibration dataset/real/pipeline/refit/round5b/fold_00/stage1_v2_calibration.json \
   --sessions-root dataset/real/sessions \
   --progress-source raw \
-  --stage1-out dataset/real/pipeline/stage1_real_refit_round3.json
+  --stage1-out dataset/real/pipeline/stage1_real_refit_round5b.json
 ```
+
+## Stage 2 v4 — 위협 KB 검색과 LLM 판정
+
+KB는 위협 카드 10건(카드당 섹션 분할 70개)과 MITRE ATT&CK Enterprise·ICS 19.2,
+ATLAS 5.6.0(기법 1,021건)으로 구성된다. 원본은 `dataset/kb/raw/`(git 제외)에
+`enterprise-attack.json`, `ics-attack.json`, `ATLAS.yaml`로 받아 둔다.
+
+```bash
+python -m pipeline.kb.build_kb                    # → dataset/kb/kb_docs.jsonl (1,091 docs)
+python -m pipeline.stage2_v4_dataset              # round5b로 세그먼트 생성
+python -m pipeline.eval_retrieval_v4              # 검색 품질(MRR 등)
+python -m pipeline.eval_stage2_v4 --models gemma3:12b --hosts http://127.0.0.1:11434
+python -m pipeline.session_calibration            # 세션 게이트 재산출
+```
+
+- 질의는 `pipeline/kb/query.py`가 evidence bundle을 카드의 `## 관측 시그니처`와 같은 어휘로
+  결정적으로 렌더링한다(가중치 ≥ 1 증거만). 슬롯 프로필 질의(`pipeline/kb/profile.py`)는
+  dev에서 유의하게 나빠 **미채택**이며 `build(with_profiles=True)`로만 켜진다.
+- 검색 모델은 `GRIDPULSE_RETRIEVER_DEVICE`(기본: 마지막 CUDA 장치)에 올린다.
+- `pipeline/stage2_rag_judge.py`의 LLM은 검색된 카드 안에서만 `attack|normal|unobservable|unknown`을
+  고르고, 인용 doc_id·증거 이름이 입력에 없으면 1회 재시도 후 무효 처리한다.
+- 결과(dev 107 세그먼트, gemma3:12b): 문서 없음 0.579 → 시그니처 질의 + 하이브리드 + 재정렬 0.757
+  (McNemar p < 0.001). 처음 보는 오용 공격·신규 정상(23 세그먼트)은 0.04–0.09로 일반화되지 않는다.
+  상세: [`RESULTS_v4.md`](RESULTS_v4.md), 설계: [`plan_rag_pipeline_v4.md`](plan_rag_pipeline_v4.md).
+- `pipeline/research/`: arXiv·Semantic Scholar·ATT&CK/ATLAS만 쓰는 DRAFT 카드 생성 루프.
+  카드 제거 실험에서 unknown 트리거가 발동하지 않아 **실험용**이며, DRAFT는 기본 KB에 들어가지 않는다.
+
+### 실시간·재생 콘솔
+
+```bash
+.venv/bin/streamlit run app.py
+```
+
+`pipeline/live.py`의 NVML 실시간 소스 또는 저장 세션 재생 소스를 같은 `v4_core` 함수로 채점한다.
+파이프라인(검색·LLM) GPU와 감시 GPU가 겹치면 측정 오염 경고를 띄운다.
+
+**계통 연계 패널**(설계: [`plan_ui_physics.md`](plan_ui_physics.md)):
+- 세션 경보가 처음 날 때 그 구간 전력 파형을 `.venv-physics`의 ANDES로 한 번 재생한다
+  (`pipeline/physics_bridge.py` → `bit2watt_impl/physics/replay_worker.py`, 약 6초, 캐시).
+  진폭은 `(ΔP_GPU/TDP) × 참여율 × 시설 비중`이며 참여율·시설 비중·계통(WECC/Kundur)은 사이드바에서 고른다.
+  WECC 고유 모드(`dataset/eval/modal_analysis.json`)와 부하 변동 주파수의 겹침을 함께 표시한다.
+  **테스트 계통 민감도이지 현재 계통 상태가 아니다.**
+- `pipeline/grid_monitor.py`: 시설 합산 전력의 0.1–2 Hz 변동 진폭·최대 램프·GPU 간 동기화(NVML만 사용).
+  계통 측 신호(UPS-MIB 입력 주파수·전압, Redfish PSU)는 `GridSource`로 받으며, 지금은 CSV 재생만 구현했다.
 
 ## 구성요소
 
@@ -183,7 +239,12 @@ python pipeline/run_pipeline.py \
 | `corpus/*.md` | 공격 시그니처 지식베이스. **새 공격은 여기 문서만 추가하면 대응** |
 | `pipeline/stage1_v2.py`, `pipeline/baseline.py` | Stage1 v2: 창 피처, 코호트 robust-z, Mondrian, idle 게이트 |
 | `pipeline/features.py` | 창 통계 피처 + 정성 설명 (Stage1/Stage2가 공유) |
-| `pipeline/rag_analyzer.py` | Stage2 RAG 검색(sbert/tfidf) + 레거시 판정 경로 |
+| `pipeline/v4_core.py`, `pipeline/live.py`, `app.py` | 실측 공식 경로(Stage1 round5b + 세션 게이트 + Stage2 v4), 실시간·재생 엔진, Streamlit 콘솔 |
+| `pipeline/physics_bridge.py`, `pipeline/grid_monitor.py` | 경보 구간 물리 재생(하위 프로세스), 시설 자극 지표·계통 측 신호 |
+| `pipeline/kb/`, `pipeline/stage2_rag_judge.py` | 위협 KB 구축·질의·하이브리드 검색, LLM 판정·검증 |
+| `pipeline/session_calibration.py`, `pipeline/stage1_alternatives.py` | 세션 단위 경보 보정, Stage1 구조 대안(kNN/IForest/CUSUM) 비교 |
+| `pipeline/research/` | 정제 출처 기반 DRAFT 카드 생성(실험용) |
+| `pipeline/rag_analyzer.py` | 이전 Stage2 RAG(sbert/tfidf) + 레거시 판정 경로(합성 평가용) |
 | `pipeline/run_pipeline.py` | 오케스트레이션 (`--stage1 v2`, `--stage2 v2|none`, 선택 `--physics-validate`) |
 | `pipeline/fit_corpus_ranges.py` | Part A: train split only로 corpus feature range 산출 |
 | `pipeline/fit_stage1_v2.py`, `pipeline/eval_stage1.py`, `pipeline/eval_stage1_auc_alpha.py` | Part B: cohort baseline/conformal + cal-only alpha |
@@ -191,12 +252,15 @@ python pipeline/run_pipeline.py \
 | `pipeline/physics_correlation.py` | **§8 실험 전용**: 고정 시나리오 Physics CSV와 cyber JSON을 `attack_id`로 사후 결합(운영 트리거 아님) |
 | `dataset/` | 공통 스키마, 합성 데이터, 캡처·평가 도구 |
 | `bit2watt_impl/physics/` | 공개 Kundur/WECC 동적 응답 + WECC IBR(교체) 침투율 스윕 |
-| `bit2watt_impl/` | NVML 수집과 SWMA/LTMA-like 검증 워크로드 |
+| `bit2watt_impl/` | NVML 수집(순시 전력 포함), SWMA/LTMA-like 및 오용(LLM-jacking·위장 학습·sponge·burst) 워크로드 |
+| `scripts/capture_exclusive.sh`, `scripts/queues/` | GPU 독점 확인 후 캡처 큐 실행(다른 작업 감지 시 세션 폐기) |
 | `workloads/` | 정상 PyTorch hard-negative 워크로드 |
 
-## 백엔드 옵션 (점진적 구축용)
+## 백엔드 옵션 (이전 `run_pipeline.py --stage2 v2` 경로)
 
-- **RAG**: `sbert`(권장, 의미 임베딩) / `tfidf`(오프라인 폴백, 모델 다운로드 불필요)
+v4 경로의 검색은 `HybridRetriever`(tfidf/bm25/dense/hybrid/hybrid_rerank, 기본 hybrid_rerank)를 쓴다.
+
+- **RAG**: `sbert`(의미 임베딩) / `tfidf`(오프라인 폴백, 모델 다운로드 불필요)
 - **LLM**: `ollama`(로컬 경량 모델) / `stub`(LLM 없이 규칙 기반, 파이프라인 검증용)
 
 → LLM 없이 `--rag-backend tfidf --llm-backend stub`으로 먼저 파이프라인 전체를
@@ -241,12 +305,16 @@ Part A 변경으로 추론 입력에서는 `gt_label`, `gt_attack_id`, `attack_i
 - ✅ features.py: 규칙적 사각파(SWMA류) vs 평평한 고부하(크립토재킹류)를 정성적으로 정확히 구분
 - ✅ 합성 v3: 3개 기본 공격 + evasive SWMA 변종 + 6개 기존 정상 + AI datacenter 정상 hard-negative를 세션 경계 없이 생성
 - ✅ Stage1 v2: train/cal만 사용해 cohort baseline과 conformal calibration 산출
-- ✅ 실측 Stage1 (round3): expected_band 코호트, alpha=0.05, idle 게이트. 리포트 `dataset/real/pipeline/refit/round3/stage1_report.md`
+- ✅ 실측 Stage1 (round5b): expected_band 코호트, alpha=0.05, idle 게이트, 순시 전력 증거.
+  미학습 LTMA 창 탐지 0 → 0.318
+- ✅ NVML `power_instant_w` 수집 버그(union 필드 오독) 수정 및 기존 세션 복원(`dataset/recover_instant_power.py`)
+- ✅ 세션 게이트(5창): 실측 101세션 OOF 정상 세션 경보 0.052, 관측 가능한 공격 세션 0.781
+- ✅ Stage2 v4: 판정 정확도 0.579 → 0.757 (dev), 처음 보는 클래스 일반화는 미달
+- ✅ `pytest -q`: 219 passed, 1 skipped
 - ✅ Retrieval: 공식 수치는 no-context/test split 기준으로 보고하며, 구 `top1_accuracy=1.0`은 누설 포함 상한으로만 표기
 - ✅ Stage2 v2: corpus v2 evidence checklist, structured evidence bundle, deterministic stub/fallback 평가 경로 추가
 - ✅ NVML idle smoke capture와 observability summary 검증
 - ✅ Ollama `gemma3:12b`로 실측 SWMA multi-GPU 후보에 대해 설명형 판정 검증 (`_backend: ollama:gemma3:12b`)
-- (선택) `--rag-backend sbert`로 임베딩 검색 품질 추가 향상 가능
 - ✅ Physics Tier B Phase 1: Kundur 7개 프로필 중 6개 수렴, 30% burst는
   `converged=false`로 기록
 - ✅ Kundur 스윕: 28개 중 26개 수렴. 전역 `osc_std` peak는 0.1 Hz로,
@@ -370,5 +438,6 @@ Tier B 결과의 `anomaly_score`는 검증된 물리 위험도가 아니라 Cybe
 
 ## 확장 (제품 비전)
 
-- `corpus/`에 문서 추가만으로 신종 위협 대응 (재학습 불필요) — MA-IDS의 "경험 라이브러리" 패턴
+- `corpus/`에 문서 추가만으로 신종 위협 대응 (재학습 불필요) — MA-IDS의 "경험 라이브러리" 패턴.
+  단, 전력 모양이 같은 공격(위장 학습 vs 크립토재킹 등)은 Stage 3(프로세스·스케줄러 증거) 없이는 구분되지 않는다
 - 커넥터 아키텍처로 향후 운영 매뉴얼/위협 인텔리전스/외부 데이터 소스를 RAG 컨텍스트에 연결 가능

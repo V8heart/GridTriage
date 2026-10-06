@@ -191,3 +191,59 @@ round5b 세 fold의 test가 78세션을 겹침 없이 나눠, 모든 세션에 �
 1. 발동 조건을 "unknown"에서 "선택된 카드의 프로필 적합도가 낮음"으로 바꾼다.
 2. 검색어에 전력 외 맥락(프로세스명, 서빙 API 사용 여부 = Stage3)을 넣는다.
 3. DRAFT는 자동 판정 근거가 아니라 **분석가 검토 대기열**로 운영한다.
+
+## 6. Bit2Watt 카드 제거 실험 (2026-10-04, `pipeline/research/eval_bit2watt.py`)
+
+SWMA·LTMA 카드(둘 다 Bit2Watt 기법)를 KB에서 지우고, 공식 판정 경로(v4 질의 + hybrid_rerank + gemma3:12b)가
+arXiv에서 Bit2Watt를 찾아 판정까지 회복하는지 본다. dev 세그먼트 SWMA 21 · LTMA 11.
+
+**수정 두 가지.**
+- 요건 게이트(`stage2_rag_judge.requirement_gate`): LLM이 고른 카드의 required 증거가 꺼져 있거나 exclusion 증거가
+  켜져 있으면 attack → unknown으로 바꾸고, 이를 연구 발동 신호로 쓴다. **기본값은 꺼짐**(아래 비용 참조).
+- DRAFT 형식: LLM은 논문 근거로 고정 증거 어휘만 고르고(required/supporting/exclusion), '관측 시그니처'는
+  질의 렌더러와 같은 문구표로 코드가 만든다.
+
+| 단계 | 수정 전 SWMA | 수정 후 SWMA | 수정 전 LTMA | 수정 후 LTMA |
+|---|---|---|---|---|
+| 카드 삭제 후 판정 | burst/ramp 14·크립토 4, unknown 0 | **unknown 14**(게이트) | 정상 10 | 정상 10, unknown 0 |
+| 연구 발동 | 강제 실행 | **unknown 14세그먼트에서 자동 발동** | 강제 | 강제(발동 0) |
+| 찾은 논문 → DRAFT | Bit2Watt → `bit2watt` | Bit2Watt → `bit2watt`(증거 어휘 포함) | 크립토 마이너 | 크립토 마이너 |
+| DRAFT 검색(상위 8) | 15/21 | **20/21** | 11/11 | 11/11 |
+| DRAFT가 판정에 쓰임 | 1 | **5**(bit2watt 3) | 0 | 5(잘못된 출처) |
+
+**해석.**
+1. 게이트는 "모르는 공격을 가까운 카드에 끼워 맞추는" 문제를 막아 SWMA에서 연구를 정상적으로 발동시켰다.
+2. 형식을 맞춘 DRAFT는 거의 항상 검색되고 판정에도 쓰이기 시작했다. 다만 LLM이 required를 3개로 잡아
+   (괴리·순시 변동·로그 불일치) 남은 12세그먼트는 DRAFT 자신의 게이트에 다시 걸려 unknown으로 남았다.
+3. LTMA는 판정이 normal로 나와 게이트가 걸리지 않고(게이트는 attack 판정만 검사), 검색어가 평탄 고부하 쪽으로
+   만들어져 Bit2Watt를 찾지 못했다.
+
+**게이트의 비용(기존 dev 107, A5 판정에 사후 적용).** 정확도 0.757 → 0.664. 정상을 공격으로 본 오판은 6 → 2로
+줄지만, 맞던 SWMA·LTMA 10건이 unknown이 된다. 원인은 게이트가 아니라 **승인 카드의 증거 조건이 실측과 맞지 않는 것**이다.
+- LTMA 카드 required `util_power_decoupled`는 실측 LTMA에서 꺼져 있다(실측 신호는 `inst_power_unsteady`).
+- SWMA 카드 exclusion `cross_job_sync`가 swma_coordinated(정답 키는 SWMA 인정)를 막는다.
+- 로그 비교가 불가한 SWMA 세그먼트는 required `log_period_mismatch`가 꺼져 있다.
+
+**다음 단계.** ① 카드 증거 조건을 실측 train fold 발화율로 다시 정한다(누설 방지: train만). ② DRAFT required를
+가장 특이한 1–2개로 제한하고 나머지는 supporting으로 둔다. ③ 순시 전력 변동이 있으면 검색어에
+"power modulation / power infrastructure"를 넣는다(LTMA). ④ ①–③ 후 게이트를 공식 경로에 켤지 다시 판단한다.
+
+## 7. 실측 Stage 1 창 단위 비교와 ablation (2026-10-06, 합성 수치 대체용)
+
+`pipeline/eval_stage1.py`를 round5b 세 fold의 test 분할(세션이 겹치지 않음, 합산 = 교차검증 78세션)에 실행.
+결과: `dataset/eval/real_stage1_eval/fold_0*.json`. 단순 z-score(legacy)는 고정 120 W 기준이라 유휴 GPU 창(2,533개)을
+전부 후보로 올리므로, 비교는 **유휴가 아닌 창**(정상 2,452–2,460 · 공격 1,377)으로 한다.
+
+| 방식 | 정상 후보율 | 공격 recall |
+|---|---|---|
+| 단순 z-score | 0.535 | 0.938 |
+| GridPulse Stage 1 | **0.116** | 0.596 |
+| 증거 축 제거 | 0.266 | 0.727 |
+| 코호트 기준선 제거(global) | 0.204 | 0.633 |
+| 진행 로그 제거 | 0.116 | 0.596 |
+
+- 정상 후보율 0.535 → 0.116(약 78% 감소), recall은 0.938 → 0.596.
+- 클래스별 창 recall: SWMA 0.681, LTMA 0.383, 크립토재킹 0.320.
+- 실측에서는 증거 축과 코호트 기준선 모두 **오탐을 줄이는 장치**다(빼면 정상 후보율 2.3배·1.8배, recall은 소폭 상승).
+  합성에서 "코호트 = 탐지력의 주력"이던 해석은 실측에서 재현되지 않는다.
+- 세션 단위(5창 게이트): 정상 세션 경보 0.052, 관측 가능한 공격 세션 0.781(§5.1).

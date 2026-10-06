@@ -653,6 +653,7 @@ def test_real_stage1_config_does_not_replace_synth_defaults():
     assert real["evidence_weights"]["progress_log_missing"] == 0.0
     assert real["idle_gate"]["mean_w_max"] == 40.0
     assert real["alpha_min_detectable_recall"] == 0.0
-    round3 = yaml.safe_load(Path("dataset/real/pipeline/refit/round3/stage1_v2.yaml").read_text(encoding="utf-8"))
-    assert round3["cohort_keys"] == real["cohort_keys"]
+    official = Path("models/round5b/stage1_v2.yaml")  # frozen copy in git; the local refit tree is not
+    frozen = yaml.safe_load(official.read_text(encoding="utf-8"))
+    assert frozen["cohort_keys"] == real["cohort_keys"]
     assert "expected_band" not in (synth.get("cohort_keys") or [])
