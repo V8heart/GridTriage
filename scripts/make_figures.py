@@ -63,7 +63,7 @@ def fig_concept():
     box(ax, 0.1, 0.9, 2.2, 1.9, "GPU 서버\n\nNVML 텔레메트리\n진행 로그\n스케줄러 신고 작업", GREY)
     ax.add_patch(FancyBboxPatch((2.9, 0.35), 4.3, 3.0, boxstyle="round,pad=0.02,rounding_size=0.1",
                                 linewidth=2, edgecolor=BLUE, facecolor="white"))
-    ax.text(5.05, 3.05, "GridPulse", ha="center", fontsize=12, fontweight="bold", color=BLUE)
+    ax.text(5.05, 3.05, "WattTriage", ha="center", fontsize=12, fontweight="bold", color=BLUE)
     for x, text in ((3.12, "① 선별\n정상 기준선\n대비 이상"), (4.47, "② 검색\n위협 지식\n1,091건"),
                     (5.82, "③ 판정·설명\n로컬 LLM\n근거 인용")):
         box(ax, x, 1.85, 1.15, 0.95, text, BLUE, size=8.5)
@@ -200,8 +200,110 @@ def fig_stage2():
     fig.savefig(OUT / "fig6_stage2_accuracy.png")
 
 
+def doc_icon(ax, x, y, color, w=0.22, h=0.29, fill=0.18, lw=0.9):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.02", linewidth=lw,
+                                edgecolor=color, facecolor=matplotlib.colors.to_rgba(color, fill)))
+    for k in range(3):
+        yy = y + h * (0.72 - 0.2 * k)
+        ax.plot([x + w * 0.18, x + w * (0.82 if k < 2 else 0.55)], [yy, yy], color=color, lw=0.6, alpha=0.8)
+
+
+def fig_rag():
+    """Stage 4-5: how 1,091 KB docs are narrowed to the 8 the LLM sees.
+
+    Example is a real dev segment (cryptojacking, cal split) from dataset/eval/stage2_v42_dev.jsonl,
+    config A5_rerank: query, top-8 doc_ids, verdict, cited doc and evidence are copied verbatim.
+    Pool size 50 and k=8 / max 2 sections per card are pipeline/kb/retriever.py defaults.
+    """
+    import numpy as np
+
+    fig, ax = canvas(13.7, 6.0)
+    rng = np.random.default_rng(3)
+
+    # ① knowledge-base pile
+    ax.text(1.85, 5.62, "위협 지식베이스 1,091건", ha="center", fontsize=11, fontweight="bold")
+    ax.add_patch(FancyBboxPatch((0.12, 1.05), 3.45, 4.3, boxstyle="round,pad=0.02,rounding_size=0.1",
+                                linewidth=1.2, edgecolor=GREY, facecolor="#fafafa", linestyle="--"))
+    pts = [(rng.uniform(0.25, 3.15), rng.uniform(1.2, 4.85)) for _ in range(150)]
+    card_idx = set(rng.choice(len(pts), 12, replace=False).tolist())
+    for i, (x, y) in enumerate(pts):
+        if i not in card_idx:
+            doc_icon(ax, x, y, GREY, fill=0.10)
+    for i in sorted(card_idx):
+        doc_icon(ax, *pts[i], BLUE, fill=0.30, lw=1.2)
+    doc_icon(ax, 0.3, 0.62, BLUE, fill=0.30, lw=1.2)
+    ax.text(0.6, 0.76, "위협 카드 10건 (섹션 70개) — 판정 단위", va="center", fontsize=8.3, color=BLUE)
+    doc_icon(ax, 0.3, 0.2, GREY, fill=0.10)
+    ax.text(0.6, 0.34, "MITRE ATT&CK·ICS·ATLAS 1,021건 — 배경 지식이자 방해 문서", va="center", fontsize=8.3,
+            color="#555")
+
+    # query
+    box(ax, 4.0, 4.75, 6.6, 0.95, "", ORANGE, fill=0.08)
+    ax.text(4.15, 5.47, "① 증거 번들 → 검색 질의  (카드의 '관측 시그니처'와 같은 어휘로 고정 렌더링)", fontsize=8.8,
+            fontweight="bold", va="center")
+    ax.text(4.15, 5.05, "\"작은 전력 진폭 · 평탄한 고부하 (TDP 근처) · 고부하 지속 · 신고 작업 유형과 전력 패턴 일치\"",
+            fontsize=8.6, va="center", color="#333")
+    ax.text(7.15, 4.6, "원시 시계열·선언 정보는 질의에 넣지 않는다", ha="center", va="top", fontsize=7.6, color="#777")
+
+    # ② first-stage retrievers
+    box(ax, 4.0, 3.05, 1.95, 0.95, "BM25\n같은 단어가 많은 문서", BLUE, size=8.3)
+    box(ax, 4.0, 1.75, 1.95, 0.95, "bge-m3 (의미 벡터)\n뜻이 가까운 문서", BLUE, size=8.3)
+    ax.text(4.0, 4.22, "② 1차 검색", ha="left", fontsize=8.6, fontweight="bold")
+    for yy in (3.52, 2.22):
+        arrow(ax, 3.6, yy, 4.0, yy, color=GREY)
+    arrow(ax, 5.55, 4.75, 5.55, 4.0, color=ORANGE)
+
+    # RRF -> pool of 50
+    box(ax, 6.3, 1.3, 1.65, 3.05, "", BLUE, fill=0.06)
+    ax.text(7.12, 4.12, "RRF 순위 융합", ha="center", fontsize=8.6, fontweight="bold")
+    ax.text(7.12, 3.84, "두 순위를 합쳐\n후보 50건", ha="center", va="top", fontsize=8.1, linespacing=1.3)
+    grey50 = set(rng.choice(50, 34, replace=False).tolist())
+    for n in range(50):
+        r, c = divmod(n, 7)
+        doc_icon(ax, 6.47 + c * 0.19, 3.0 - r * 0.205, GREY if n in grey50 else BLUE, w=0.13, h=0.17,
+                 fill=0.12 if n in grey50 else 0.3, lw=0.7)
+    arrow(ax, 5.95, 3.52, 6.3, 3.2)
+    arrow(ax, 5.95, 2.22, 6.3, 2.5)
+
+    # ③ rerank -> top 8
+    box(ax, 8.3, 1.3, 2.35, 3.05, "", PURPLE, fill=0.06)
+    ax.text(9.47, 4.12, "③ 재정렬 (cross-encoder)", ha="center", fontsize=8.6, fontweight="bold")
+    ax.text(9.47, 3.85, "질의와 문서를 함께 읽고 재채점\n같은 카드는 최대 2섹션", ha="center", va="top",
+            fontsize=7.7, linespacing=1.3, color="#333")
+    top8 = ["cryptojacking · 관측 시그니처", "normal_workloads · 관측 시그니처", "sponge_attack · 관측 시그니처",
+            "ltma · 관측 프로필", "sponge_attack · 관측 요약", "swma · 관측 시그니처", "llmjacking · 관측 시그니처",
+            "burst_ramp · 관측 프로필"]
+    for i, name in enumerate(top8):
+        y = 3.12 - i * 0.24
+        hit = i == 0
+        ax.text(8.42, y, f"{i + 1}", fontsize=7.6, va="center", color=PURPLE, fontweight="bold")
+        ax.text(8.6, y, name, fontsize=7.2, va="center", color="black" if hit else "#444",
+                fontweight="bold" if hit else "normal",
+                bbox=dict(boxstyle="round,pad=0.12", fc=matplotlib.colors.to_rgba(ORANGE, 0.25), ec="none")
+                if hit else None)
+    arrow(ax, 7.95, 2.85, 8.3, 2.85)
+    arrow(ax, 9.47, 4.75, 9.47, 4.35, color=ORANGE)
+
+    # ④ LLM judgement
+    box(ax, 11.0, 2.35, 2.6, 2.0, "", RED, fill=0.06)
+    ax.text(12.3, 4.12, "④ 로컬 LLM 판정 (gemma3:12b)", ha="center", fontsize=8.6, fontweight="bold")
+    ax.text(12.3, 3.85, "입력: 증거 번들 + 문서 8건 [doc_id]\n원시 시계열 없음", ha="center", va="top", fontsize=7.7,
+            linespacing=1.3, color="#333")
+    ax.text(11.13, 3.05, "판정       attack\n위협 카드  cryptojacking\n인용 문서  cryptojacking#관측 시그니처\n사용 증거  sustained_high_load",
+            fontsize=7.3, va="center", linespacing=1.45, family="Noto Sans CJK JP")
+    arrow(ax, 10.65, 2.85, 11.0, 2.85)
+    box(ax, 11.0, 1.3, 2.6, 0.8, "검증: 고른 카드·인용 문서·증거 이름이\n입력에 없으면 무효 (1회 재시도)", RED,
+        fill=0.12, size=7.7)
+    arrow(ax, 12.3, 2.35, 12.3, 2.1, color=RED)
+
+    # funnel counts
+    for x, label in ((4.97, "1,091건 → 순위"), (7.12, "50건"), (9.47, "8건"), (12.3, "인용 1건")):
+        ax.text(x, 1.0, label, ha="center", va="top", fontsize=10, fontweight="bold", color="#333")
+    fig.savefig(OUT / "fig7_rag_retrieval.png")
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    for fn in (fig_concept, fig_architecture, fig_observability, fig_session_gate, fig_ibr, fig_stage2):
+    for fn in (fig_concept, fig_architecture, fig_observability, fig_session_gate, fig_ibr, fig_stage2, fig_rag):
         fn()
         print("wrote", fn.__name__)

@@ -1,7 +1,14 @@
-# GridPulse — GPU 워크로드 이상탐지 파이프라인
+# WattTriage — GPU 텔레메트리 기반 AI 데이터센터 사이버-물리 위협 선별
 
 새 공격이 나올 때마다 탐지 모델을 재학습하는 대신, **범용 이상 필터로 의심 활동을
 선별하고, 알려진 공격 시그니처 문서와 RAG로 대조**하는 실용 파이프라인.
+
+> 이전 이름은 GridPulse다. 코드 안의 일부 식별자(`app.py` 제목, 환경변수 `GRIDPULSE_RETRIEVER_DEVICE`,
+> CSS 클래스 `gp-*` 등)는 호환을 위해 그대로 둔다.
+
+![WattTriage 개념도](docs/figures/fig1_concept.png)
+
+*추가 계측기 없이 GPU 서버 텔레메트리만으로 선별 → 위협 지식 검색 → 근거 기반 판정을 하고, 경보 구간은 공개 계통 모델(ANDES Kundur·WECC)에서 물리 응답을 확인한다.*
 
 ## 설계 근거 (검증된 2-tier IDS 패턴)
 
@@ -26,6 +33,10 @@ NVML 텔레메트리 (gp-telemetry/1.2)
             + bge-reranker 재정렬 → LLM(gemma3:12b) 판정 + 인용·증거 검증
 ```
 
+![시스템 아키텍처](docs/figures/fig2_architecture.png)
+
+*실선은 운영 경로, 점선은 오프라인 적합과 2차 과제다. 임계값·α·세션 게이트는 train/cal 분할로만 정한다.*
+
 실측 공식 경로는 `pipeline/v4_core.py`(일괄·재생·실시간 공유)이며, `run_pipeline.py`의
 `--stage2 v2`는 합성 평가용 이전 경로다. 레거시 `--stage1 legacy`는 창 변동폭 z-score 스크리닝이다.
 
@@ -45,7 +56,8 @@ NVML 텔레메트리 (gp-telemetry/1.2)
 ```bash
 bash setup_env.sh          # requirements.txt 설치 + ATT&CK·ATLAS 원본 받기(체크섬 검증) + KB 구축(1,091건)
 source .venv/bin/activate
-.venv/bin/streamlit run app.py   # 콘솔. 저장 세션(dataset/real)이 없으면 Live 모드로 시작
+.venv/bin/streamlit run app_v2.py   # 한 화면 콘솔(권장). 저장 세션(dataset/real)이 없으면 Live 모드로 시작
+.venv/bin/streamlit run app.py      # 이전 콘솔(v1)
 
 # (선택) 로컬 LLM: 이 서버에는 Ollama 0.32.1이 이미 설치되어 있음
 #   ollama serve   # 미실행 시
@@ -144,6 +156,14 @@ pytest 기본: `pytest -q -m "not gpu"`.
 
 ## Stage1 v2 공식 설정
 
+![평균 전력과 순시 전력](docs/figures/fig3_observability.png)
+
+*같은 SWMA 구간(1초 주기)에서 1초 평균 전력은 변조 진폭을 40 W로 지우지만 순시 전력은 418 W를 보존한다. NVML 실효 갱신은 약 500 ms라 판정 가능 대역을 약 1 Hz로 선언한다.*
+
+![세션 게이트](docs/figures/fig4_session_gate.png)
+
+*정상 DDP 학습은 후보가 흩어져 경보가 없고, LTMA·SWMA는 후보가 5창 연속(약 90초)이 되면 세션 경보가 난다. 실측 교차검증(78세션): 정상 후보율 0.535 → 0.116, 정상 세션 경보 0.052, 관측 가능한 공격 세션 0.781.*
+
 점수 식(u-score / conformal)은 합성·실측이 같다. **코호트 키와 alpha만 갈라진다.**
 관측 `mean_w` / `power_band`는 코호트 키에 넣지 않는다.
 
@@ -211,17 +231,46 @@ python -m pipeline.session_calibration            # 세션 게이트 재산출
 - 결과(dev 107 세그먼트, gemma3:12b): 문서 없음 0.579 → 시그니처 질의 + 하이브리드 + 재정렬 0.757
   (McNemar p < 0.001). 처음 보는 오용 공격·신규 정상(23 세그먼트)은 0.04–0.09로 일반화되지 않는다.
   상세: [`RESULTS_v4.md`](RESULTS_v4.md), 설계: [`plan_rag_pipeline_v4.md`](plan_rag_pipeline_v4.md).
+![위협 지식 검색과 판정 흐름](docs/figures/fig7_rag_retrieval.png)
+
+*증거 번들을 카드의 관측 시그니처와 같은 어휘로 질의화해 1,091건에서 후보 50건, 재정렬로 8건을 골라 LLM에 넘긴다. 예시는 실측 크립토재킹 세그먼트다.*
+
+![LLM 판정 정확도](docs/figures/fig6_stage2_accuracy.png)
+
 - `pipeline/research/`: arXiv·Semantic Scholar·ATT&CK/ATLAS만 쓰는 DRAFT 카드 생성 루프.
   카드 제거 실험에서 unknown 트리거가 발동하지 않아 **실험용**이며, DRAFT는 기본 KB에 들어가지 않는다.
 
 ### 실시간·재생 콘솔
 
 ```bash
-.venv/bin/streamlit run app.py
+.venv/bin/streamlit run app_v2.py
 ```
 
 `pipeline/live.py`의 NVML 실시간 소스 또는 저장 세션 재생 소스를 같은 `v4_core` 함수로 채점한다.
 파이프라인(검색·LLM) GPU와 감시 GPU가 겹치면 측정 오염 경고를 띄운다.
+
+![WattTriage Console](docs/figures/fig8_console.png)
+
+`app_v2.py`는 관제 요원이 스크롤 없이 첫 화면만 보고 판단하도록 구성했다(`app.py`는 이전 v1).
+
+| 영역 | 내용 |
+|---|---|
+| ⓪ 상태 줄 | 실행 상태, 입력, 판정 가능 대역·실효 갱신 간격 |
+| ① 상태 타일 | GPU별 상태(정상 감시 → 의심 누적 → 경보·분석 중 → 판정, 계통 주의), 세션 경보 수, 판정 LLM, 계통 대표값 |
+| ② 규모 환산 흐름 | GPU 변동 → 시설 0.1–2 Hz 변동 → 계통 부하 대비(× 참여율 × 시설 비중) → 계통 응답 |
+| ③ GPU 전력 | 평균·순시 전력, 의심 창(빨강)·계통 주의 창(grid_watch, 보라) 음영 |
+| ④ 최신 판정 | 판정·위협 카드·설명, 사용 증거, 검색 문서 상위 5건(인용 표시) |
+| ⑤ 계통 연계 | 계통 상태(시험 계통 또는 수전점 계측), 부하 스펙트럼–계통 고유 모드 겹침(관측 불가 대역 음영) |
+| 상세(스크롤 아래) | 판정 이력과 근거, 계통 흐름·이벤트(부하–계통 주파수 시간 정렬, 이벤트 타임라인), 창 분석, 물리 응답 |
+
+경보까지는 의심 창 5개 연속이 필요해 이상 시작 후 최소 90초(실측 중앙값 90초, 크립토재킹·LTMA 약 150초)가 걸리고,
+경보 후 검색과 판정(gemma3:12b 중앙값 9.4초)은 약 10–20초 걸린다. 물리 재생(약 10초)은 판정과 병렬이다.
+
+**GPU 메모리가 부족할 때(임시 운영).** 검색 모델(bge-m3·bge-reranker-v2-m3)은 각각 float32 약 2.1 GiB로,
+둘을 GPU에 올리려면 4 GiB 이상이 필요하다.
+- 검색 모델을 CPU로: `GRIDPULSE_RETRIEVER_DEVICE=cpu .venv/bin/streamlit run app_v2.py` (검색 중앙값 약 11초).
+- 판정을 Anthropic API로: `ANTHROPIC_API_KEY`를 넣고 사이드바 판정 LLM에서 `claude-opus-5-5`를 고른다
+  (`pipeline/stage2_rag_judge.py`). 이때 증거 번들과 검색 문서가 외부로 나가므로 공식 평가·시연에는 쓰지 않는다.
 
 **계통 연계 패널**(설계: [`plan_ui_physics.md`](plan_ui_physics.md)):
 - 세션 경보가 처음 날 때 그 구간 전력 파형을 `.venv-physics`의 ANDES로 한 번 재생한다
@@ -229,8 +278,11 @@ python -m pipeline.session_calibration            # 세션 게이트 재산출
   진폭은 `(ΔP_GPU/TDP) × 참여율 × 시설 비중`이며 참여율·시설 비중·계통(WECC/Kundur)은 사이드바에서 고른다.
   WECC 고유 모드(`dataset/eval/modal_analysis.json`)와 부하 변동 주파수의 겹침을 함께 표시한다.
   **테스트 계통 민감도이지 현재 계통 상태가 아니다.**
-- `pipeline/grid_monitor.py`: 시설 합산 전력의 0.1–2 Hz 변동 진폭·최대 램프·GPU 간 동기화(NVML만 사용).
-  계통 측 신호(UPS-MIB 입력 주파수·전압, Redfish PSU)는 `GridSource`로 받으며, 지금은 CSV 재생만 구현했다.
+- `pipeline/grid_monitor.py`: 시설 합산 전력의 0.1–2 Hz 변동 진폭·최대 램프·GPU 간 동기화(NVML만 사용),
+  부하 스펙트럼과 시간 정렬용 시계열. 계통 측 신호(UPS-MIB 입력 주파수·전압, Redfish PSU, PMU)는 `GridSource`로
+  받으며, 지금은 CSV 재생만 구현했다(형식 예시: `examples/grid/`, 합성).
+- 물리 재생 결과에는 응답이 가장 큰 발전기의 주파수 편차 파형(10 Hz)이 들어 있어, 콘솔이 경보 구간의 실제 시각에 맞춰 그린다.
+- ANDES(GPLv3+)는 `.venv-physics`에만 설치되며, 탐지 엔진(`.venv`)은 하위 프로세스(JSON 입출력)로만 호출한다.
 
 ## 구성요소
 
@@ -239,7 +291,7 @@ python -m pipeline.session_calibration            # 세션 게이트 재산출
 | `corpus/*.md` | 공격 시그니처 지식베이스. **새 공격은 여기 문서만 추가하면 대응** |
 | `pipeline/stage1_v2.py`, `pipeline/baseline.py` | Stage1 v2: 창 피처, 코호트 robust-z, Mondrian, idle 게이트 |
 | `pipeline/features.py` | 창 통계 피처 + 정성 설명 (Stage1/Stage2가 공유) |
-| `pipeline/v4_core.py`, `pipeline/live.py`, `app.py` | 실측 공식 경로(Stage1 round5b + 세션 게이트 + Stage2 v4), 실시간·재생 엔진, Streamlit 콘솔 |
+| `pipeline/v4_core.py`, `pipeline/live.py`, `app_v2.py`, `app.py` | 실측 공식 경로(Stage1 round5b + 세션 게이트 + Stage2 v4), 실시간·재생 엔진, Streamlit 콘솔(v2 권장, v1) |
 | `pipeline/physics_bridge.py`, `pipeline/grid_monitor.py` | 경보 구간 물리 재생(하위 프로세스), 시설 자극 지표·계통 측 신호 |
 | `pipeline/kb/`, `pipeline/stage2_rag_judge.py` | 위협 KB 구축·질의·하이브리드 검색, LLM 판정·검증 |
 | `pipeline/session_calibration.py`, `pipeline/stage1_alternatives.py` | 세션 단위 경보 보정, Stage1 구조 대안(kNN/IForest/CUSUM) 비교 |
@@ -310,7 +362,7 @@ Part A 변경으로 추론 입력에서는 `gt_label`, `gt_attack_id`, `attack_i
 - ✅ NVML `power_instant_w` 수집 버그(union 필드 오독) 수정 및 기존 세션 복원(`dataset/recover_instant_power.py`)
 - ✅ 세션 게이트(5창): 실측 101세션 OOF 정상 세션 경보 0.052, 관측 가능한 공격 세션 0.781
 - ✅ Stage2 v4: 판정 정확도 0.579 → 0.757 (dev), 처음 보는 클래스 일반화는 미달
-- ✅ `pytest -q`: 219 passed, 1 skipped
+- ✅ `pytest -q`: 236 passed, 1 skipped
 - ✅ Retrieval: 공식 수치는 no-context/test split 기준으로 보고하며, 구 `top1_accuracy=1.0`은 누설 포함 상한으로만 표기
 - ✅ Stage2 v2: corpus v2 evidence checklist, structured evidence bundle, deterministic stub/fallback 평가 경로 추가
 - ✅ NVML idle smoke capture와 observability summary 검증
@@ -353,6 +405,10 @@ python pipeline/run_pipeline.py \
 ```
 
 ### IBR 침투율 스윕 (교체, WECC)
+
+![IBR 비중별 동기기 응답](docs/figures/fig5_ibr_response.png)
+
+*같은 부하 변동(계통 부하의 1.2%)에서 IBR 비중이 높을수록(관성 32%·52% 감소) 응답이 커진다. 50%에서는 계통 자체 진동(약 1.9 Hz)이 함께 들뜬다. WECC 전기기계 모드는 28개, 0.27–1.88 Hz다.*
 
 소량 IBR **추가**는 용량 비중이 무시할 수준(~0.01%)이라 폐기한다. 대신 공개
 WECC 179 GENCLS 동기기를 Sn 내림차순으로 REGCA1(+REECA1)로 **교체**해 용량 기준

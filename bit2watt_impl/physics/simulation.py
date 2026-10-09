@@ -281,7 +281,10 @@ def _extract_omega(
     forcing_frequency_hz: float | None,
     toggle_times_s: list[float] | None = None,
     transition_mask_s: float = 0.15,
+    trace_hz: float | None = None,
 ) -> dict[str, Any]:
+    """Response features of the most-oscillating generator; ``trace_hz`` also returns its
+    frequency deviation (mHz from the first sample) resampled at that rate, for plotting."""
     model = getattr(ss, model_name)
     frame = ss.TDS.get_timeseries(model.omega)
     times = np.asarray(frame.index, dtype=float)
@@ -343,8 +346,13 @@ def _extract_omega(
         forcing_bin = int(np.argmin(np.abs(freqs - forcing_frequency_hz)))
         forcing_amplitude = float(2.0 * spectrum[forcing_bin] / len(centered))
     generator_indices = list(model.idx.v)
+    trace = None
+    if trace_hz:
+        t_out = np.arange(times[0], times[-1], 1.0 / trace_hz)
+        dev = (np.interp(t_out, times, selected) - selected[0]) * nominal_hz * 1000.0
+        trace = {"t_s": [round(float(v), 3) for v in t_out], "freq_dev_mhz": [round(float(v), 4) for v in dev]}
 
-    return {
+    out = {
         # Alias kept one cycle for older CSV/summary consumers.
         "rocof_hz_s": rocof_max,
         "rocof_max_hz_s": rocof_max,
@@ -359,6 +367,9 @@ def _extract_omega(
         "response_device": str(generator_indices[response_col]),
         "omega_samples": int(len(times)),
     }
+    if trace is not None:
+        out["omega_trace"] = trace
+    return out
 
 
 def _run_once(
@@ -695,6 +706,7 @@ def inject_observed_waveform(
         t_end_s=meta["t_end_s"] + 2.0,
         forcing_frequency_hz=None,
         toggle_times_s=[],
+        trace_hz=10.0,
     )
     return {
         "test_system": test_system,

@@ -142,6 +142,44 @@ def _call_ollama(prompt: str, model: str, *, timeout: int = 600, host: str | Non
     return _extract_json(out.get("response", ""))
 
 
+# Claude judges (model ids starting with "claude-") go through the Anthropic API instead of a local
+# Ollama server. The bundle and retrieved documents then leave this machine.
+CLAUDE_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "enum": list(VERDICTS)},
+        "threat_card": {"type": ["string", "null"]},
+        "cited_docs": {"type": "array", "items": {"type": "string"}},
+        "evidence_used": {"type": "array", "items": {"type": "string"}},
+        "explanation": {"type": "string"},
+    },
+    "required": ["verdict", "threat_card", "cited_docs", "evidence_used", "explanation"],
+    "additionalProperties": False,
+}
+
+
+def is_api_model(model: str) -> bool:
+    return model.startswith("claude-")
+
+
+def _call_claude(prompt: str, model: str, *, timeout: int = 600) -> dict:
+    import anthropic  # only needed when a Claude judge is selected
+
+    client = anthropic.Anthropic(timeout=timeout)
+    resp = client.beta.messages.create(
+        model=model,
+        max_tokens=16000,
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",  # a policy decline is re-run on a fallback model inside the same call
+        output_config={"effort": "medium", "format": {"type": "json_schema", "schema": CLAUDE_JSON_SCHEMA}},
+        messages=[{"role": "user", "content": prompt}],
+    )
+    if resp.stop_reason == "refusal":
+        category = resp.stop_details.category if resp.stop_details else None
+        raise RuntimeError(f"Claude declined the request (category={category})")
+    return json.loads(next(b.text for b in resp.content if b.type == "text"))
+
+
 def validate(raw: dict, *, cards: list[str], doc_ids: set[str], evidence_names: set[str]) -> Judgment:
     errors = []
     verdict = str(raw.get("verdict", "")).strip().lower()
@@ -177,7 +215,7 @@ def judge(bundle: dict, docs: list[dict], *, model: str = "gemma3:12b", all_card
     result = None
     for attempt in range(1, retries + 2):
         try:
-            raw = _call_ollama(prompt, model, host=host)
+            raw = _call_claude(prompt, model) if is_api_model(model) else _call_ollama(prompt, model, host=host)
             result = validate(raw, cards=cards, doc_ids=doc_ids, evidence_names=names)
         except Exception as exc:  # network / JSON errors count as invalid attempts
             result = Judgment("unknown", None, valid=False, errors=[f"{type(exc).__name__}: {exc}"])

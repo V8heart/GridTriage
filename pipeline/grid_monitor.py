@@ -74,10 +74,45 @@ def facility_forcing(rows: dict[int, list[dict]], *, tdp_w: float = 450.0, horiz
     }
 
 
+def amplitude_spectrum(x: np.ndarray, sample_hz: float, band: tuple[float, float]) -> tuple[np.ndarray, np.ndarray]:
+    """Single-sided amplitude spectrum (Hann window, mean removed) restricted to ``band``."""
+    x = np.asarray(x, float) - np.mean(x)
+    w = np.hanning(len(x))
+    amp = np.abs(np.fft.rfft(x * w)) * 2 / w.sum()
+    freqs = np.fft.rfftfreq(len(x), 1.0 / sample_hz)
+    keep = (freqs >= band[0]) & (freqs <= band[1])
+    return freqs[keep], amp[keep]
+
+
+def facility_spectrum(rows: dict[int, list[dict]], *, tdp_w: float = 450.0, horizon_s: float = 120.0,
+                      band: tuple[float, float] = (0.05, 2.0)) -> dict:
+    """Spectrum of the summed facility power as a fraction of total TDP, for the mode-overlap plot."""
+    wide = _grid_series(rows, horizon_s)
+    if len(wide) < GRID_HZ * 20:
+        return {}
+    freqs, amp = amplitude_spectrum(wide.sum(axis=1).to_numpy(), GRID_HZ, band)
+    return {"freq_hz": freqs, "amp_pu": amp / (wide.shape[1] * tdp_w)}
+
+
+def facility_series(rows: dict[int, list[dict]], *, horizon_s: float = 900.0) -> dict:
+    """Summed facility power on the 10 Hz grid and its 0.1-2 Hz component, for the time-aligned plot."""
+    wide = _grid_series(rows, horizon_s)
+    if len(wide) < GRID_HZ * 20:
+        return {}
+    total = wide.sum(axis=1).to_numpy()
+    return {"t_epoch": wide.index.to_numpy() / GRID_HZ, "total_w": total, "band_w": _band(total, *BAND_HZ)}
+
+
 class NoGridSource:
     label = "미연결"
 
     def snapshot(self, t_epoch: float | None = None) -> dict | None:
+        return None
+
+    def spectrum(self, t_epoch: float | None = None, band: tuple[float, float] = (0.05, 2.0)) -> dict | None:
+        return None
+
+    def series(self, t_epoch: float | None, horizon_s: float, max_hz: float = 10.0) -> dict | None:
         return None
 
 
@@ -139,10 +174,47 @@ class CsvGridSource:
         t0, t1 = float(self.frame[self.tcol].iloc[0]), float(self.frame[self.tcol].iloc[-1])
         return t0 + (self.horizon_s + t_epoch - self._anchor) % max(t1 - t0, 1e-9)
 
-    def snapshot(self, t_epoch: float | None = None) -> dict | None:
+    def _window(self, t_epoch: float | None) -> pd.DataFrame:
         now = self._file_time(t_epoch)
         f = self.frame if now is None else self.frame[self.frame[self.tcol] <= now]
-        f = f[f[self.tcol] >= f[self.tcol].max() - self.horizon_s] if len(f) else f
+        return f[f[self.tcol] >= f[self.tcol].max() - self.horizon_s] if len(f) else f
+
+    def spectrum(self, t_epoch: float | None = None, band: tuple[float, float] = (0.05, 2.0)) -> dict | None:
+        """Measured frequency spectrum (mHz) over the same horizon, None if too sparse for the band."""
+        f = self._window(t_epoch)
+        if len(f) < 32:
+            return None
+        t, freq = f[self.tcol].to_numpy(float), f["freq_hz"].to_numpy(float)
+        sample_hz = (len(t) - 1) / (t[-1] - t[0]) if t[-1] > t[0] else 0.0
+        if sample_hz < MIN_OSC_SAMPLE_HZ:
+            return None
+        grid = t[0] + np.arange(int(round((t[-1] - t[0]) * sample_hz)) + 1) / sample_hz
+        y = np.interp(grid, t, freq)
+        y = y - np.polyval(np.polyfit(grid - grid[0], y, 1), grid - grid[0])  # remove slow drift
+        freqs, amp = amplitude_spectrum(y, sample_hz, (band[0], min(band[1], sample_hz / 2)))
+        return {"freq_hz": freqs, "amp_mhz": amp * 1000}
+
+    def series(self, t_epoch: float | None, horizon_s: float, max_hz: float = 10.0) -> dict | None:
+        """Frequency deviation (mHz) on the pipeline's data clock over ``horizon_s``, at most ``max_hz``."""
+        if t_epoch is None or len(self.frame) < 2:
+            return None
+        tf, ff = self.frame[self.tcol].to_numpy(float), self.frame["freq_hz"].to_numpy(float)
+        hz = min(max_hz, (len(tf) - 1) / (tf[-1] - tf[0])) if tf[-1] > tf[0] else 0.0
+        if hz <= 0:
+            return None
+        times = np.arange(t_epoch - horizon_s, t_epoch, 1.0 / hz)
+        if self.relative:  # same mapping as _file_time, vectorised
+            self._file_time(t_epoch)
+            ft = tf[0] + (self.horizon_s + times - self._anchor) % max(tf[-1] - tf[0], 1e-9)
+        else:
+            keep = (times >= tf[0]) & (times <= tf[-1])
+            times, ft = times[keep], times[keep]
+        if len(times) < 2:
+            return None
+        return {"t_epoch": times, "freq_dev_mhz": (np.interp(ft, tf, ff) - self.nominal_hz) * 1000.0}
+
+    def snapshot(self, t_epoch: float | None = None) -> dict | None:
+        f = self._window(t_epoch)
         if len(f) < 3:
             return None
         out = grid_indicators(f[self.tcol].to_numpy(), f["freq_hz"].to_numpy(), self.nominal_hz)

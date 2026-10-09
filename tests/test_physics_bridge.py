@@ -125,3 +125,35 @@ def test_relative_time_file_loops_with_data_time(tmp_path):
     first = src.snapshot(1_790_000_000.0)  # any epoch: the file is anchored on first use
     assert first["osc_freq_hz"] == pytest.approx(0.5, abs=0.02)
     assert src.snapshot(1_790_000_000.0 + 500)["freq_hz"] is not None  # past the file end: loops
+
+
+def test_spectra_for_mode_overlap_plot(tmp_path):
+    from pipeline.grid_monitor import facility_spectrum
+
+    fs = facility_spectrum(_rows(True))
+    peak = fs["freq_hz"][np.argmax(fs["amp_pu"])]
+    assert peak == pytest.approx(0.5, abs=0.05)
+    assert fs["amp_pu"].max() == pytest.approx(4 / np.pi * 75 / 450, rel=0.15)  # square-wave fundamental, per TDP
+
+    t = np.arange(0, 120, 1 / 30)
+    path = tmp_path / "pcc.csv"
+    pd.DataFrame({"t_epoch": t, "freq_hz": 60 + 0.008 * np.sin(2 * np.pi * 0.37 * t)}).to_csv(path, index=False)
+    gs = CsvGridSource(path).spectrum(119.0)
+    assert gs["freq_hz"][np.argmax(gs["amp_mhz"])] == pytest.approx(0.37, abs=0.03)
+    assert gs["amp_mhz"].max() == pytest.approx(8.0, rel=0.2)
+    sparse = tmp_path / "ups.csv"
+    pd.DataFrame({"t_epoch": t[::30], "freq_hz": 60.0}).to_csv(sparse, index=False)
+    assert CsvGridSource(sparse).spectrum(119.0) is None  # 1 sample/s cannot resolve the band
+
+
+def test_time_aligned_series(tmp_path):
+    from pipeline.grid_monitor import facility_series
+
+    fs = facility_series(_rows(True))
+    assert fs["t_epoch"][0] == pytest.approx(1e6) and len(fs["t_epoch"]) == len(fs["total_w"]) == len(fs["band_w"])
+    assert fs["total_w"].mean() == pytest.approx(650.0, rel=0.02)  # two GPUs, 250/400 W square wave
+
+    path = tmp_path / "pcc.csv"
+    pd.DataFrame({"t_epoch": np.arange(0, 100, 0.1), "freq_hz": 60.01}).to_csv(path, index=False)
+    gs = CsvGridSource(path).series(90.0, horizon_s=30.0)
+    assert gs["t_epoch"][0] == pytest.approx(60.0) and np.allclose(gs["freq_dev_mhz"], 10.0)

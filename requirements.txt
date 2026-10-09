@@ -28,3 +28,4 @@ plotly==7.1.0
 
 # tests
 pytest==9.1.1
+anthropic>=1.12,<2  # optional: Claude judge in the console (app_v2.py)

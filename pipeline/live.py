@@ -225,7 +225,8 @@ class LiveEngine:
                                               "declared_job_type", "observed_n_procs")},
                    "t_end": t_end, "window_row": row.to_dict(),
                    **{k: scored[k] for k in ("u_score", "p_value", "is_candidate", "idle_status", "active_evidence",
-                                              "evidence_bool", "driving_feature", "impact_level")}}
+                                              "evidence_bool", "driving_feature", "impact_level",
+                                              "grid_watch")}}
             out.append(rec)
             self._track_run(rec)
         with self._lock:
@@ -268,10 +269,12 @@ class LiveEngine:
         with self._lock:
             self.state.physics[aid] = {"status": "running"}
 
+        data_t0 = run[0]["t_end"] - self.settings.window_s  # data time of the replayed waveform's first sample
+
         def task():
             result = replay(power, hz, self.settings.physics, runner=self.physics_runner)
             with self._lock:
-                self.state.physics[aid] = {"status": "done", **result}
+                self.state.physics[aid] = {"status": "done", "data_t0": data_t0, **result}
 
         self._physics_pool.submit(task)
 
