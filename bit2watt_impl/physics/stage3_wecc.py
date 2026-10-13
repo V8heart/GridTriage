@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-os.environ.setdefault("MPLCONFIGDIR", "/tmp/gridpulse-matplotlib")
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/gridtriage-matplotlib")
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt

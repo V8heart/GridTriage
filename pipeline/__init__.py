@@ -1,2 +1,2 @@
-"""GridPulse 탐지·RAG 파이프라인."""
+"""GridTriage 탐지·RAG 파이프라인."""
 

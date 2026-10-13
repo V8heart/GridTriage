@@ -1,12 +1,12 @@
-# WattTriage — GPU 텔레메트리 기반 AI 데이터센터 사이버-물리 위협 선별
+# GridTriage — GPU 텔레메트리 기반 AI 데이터센터 사이버-물리 위협 선별
 
 새 공격이 나올 때마다 탐지 모델을 재학습하는 대신, **범용 이상 필터로 의심 활동을
 선별하고, 알려진 공격 시그니처 문서와 RAG로 대조**하는 실용 파이프라인.
 
-> 이전 이름은 GridPulse다. 코드 안의 일부 식별자(`app.py` 제목, 환경변수 `GRIDPULSE_RETRIEVER_DEVICE`,
-> CSS 클래스 `gp-*` 등)는 호환을 위해 그대로 둔다.
+> 이전 이름은 GridPulse, WattTriage다. 환경변수는 `GRIDTRIAGE_RETRIEVER_DEVICE`이며 예전 이름
+> `GRIDPULSE_RETRIEVER_DEVICE`도 계속 읽는다. 화면 CSS 클래스 `gp-*`는 그대로 둔다.
 
-![WattTriage 개념도](docs/figures/fig1_concept.png)
+![GridTriage 개념도](docs/figures/fig1_concept.png)
 
 *추가 계측기 없이 GPU 서버 텔레메트리만으로 선별 → 위협 지식 검색 → 근거 기반 판정을 하고, 경보 구간은 공개 계통 모델(ANDES Kundur·WECC)에서 물리 응답을 확인한다.*
 
@@ -225,7 +225,7 @@ python -m pipeline.session_calibration            # 세션 게이트 재산출
 - 질의는 `pipeline/kb/query.py`가 evidence bundle을 카드의 `## 관측 시그니처`와 같은 어휘로
   결정적으로 렌더링한다(가중치 ≥ 1 증거만). 슬롯 프로필 질의(`pipeline/kb/profile.py`)는
   dev에서 유의하게 나빠 **미채택**이며 `build(with_profiles=True)`로만 켜진다.
-- 검색 모델은 `GRIDPULSE_RETRIEVER_DEVICE`(기본: 마지막 CUDA 장치)에 올린다.
+- 검색 모델은 `GRIDTRIAGE_RETRIEVER_DEVICE`(기본: 마지막 CUDA 장치)에 올린다.
 - `pipeline/stage2_rag_judge.py`의 LLM은 검색된 카드 안에서만 `attack|normal|unobservable|unknown`을
   고르고, 인용 doc_id·증거 이름이 입력에 없으면 1회 재시도 후 무효 처리한다.
 - 결과(dev 107 세그먼트, gemma3:12b): 문서 없음 0.579 → 시그니처 질의 + 하이브리드 + 재정렬 0.757
@@ -249,7 +249,7 @@ python -m pipeline.session_calibration            # 세션 게이트 재산출
 `pipeline/live.py`의 NVML 실시간 소스 또는 저장 세션 재생 소스를 같은 `v4_core` 함수로 채점한다.
 파이프라인(검색·LLM) GPU와 감시 GPU가 겹치면 측정 오염 경고를 띄운다.
 
-![WattTriage Console](docs/figures/fig8_console.png)
+![GridTriage Console](docs/figures/fig8_console.png)
 
 `app_v2.py`는 관제 요원이 스크롤 없이 첫 화면만 보고 판단하도록 구성했다(`app.py`는 이전 v1).
 
@@ -268,7 +268,7 @@ python -m pipeline.session_calibration            # 세션 게이트 재산출
 
 **GPU 메모리가 부족할 때(임시 운영).** 검색 모델(bge-m3·bge-reranker-v2-m3)은 각각 float32 약 2.1 GiB로,
 둘을 GPU에 올리려면 4 GiB 이상이 필요하다.
-- 검색 모델을 CPU로: `GRIDPULSE_RETRIEVER_DEVICE=cpu .venv/bin/streamlit run app_v2.py` (검색 중앙값 약 11초).
+- 검색 모델을 CPU로: `GRIDTRIAGE_RETRIEVER_DEVICE=cpu .venv/bin/streamlit run app_v2.py` (검색 중앙값 약 11초).
 - 판정을 Anthropic API로: `ANTHROPIC_API_KEY`를 넣고 사이드바 판정 LLM에서 `claude-opus-5-5`를 고른다
   (`pipeline/stage2_rag_judge.py`). 이때 증거 번들과 검색 문서가 외부로 나가므로 공식 평가·시연에는 쓰지 않는다.
 
@@ -450,7 +450,7 @@ ANDES 2.0은 Python 3.11 이상이 필요하므로 기존 `.venv`와 분리한�
 ./setup_physics_env.sh
 source .venv-physics/bin/activate
 
-# Phase 1: Kundur 정상/주기/버스트/램프 및 GridPulse 공격 프로필
+# Phase 1: Kundur 정상/주기/버스트/램프 및 GridTriage 공격 프로필
 python -m bit2watt_impl.physics.stage1_kundur
 
 # Phase 2: Kundur 0.1~1.45 Hz 스윕

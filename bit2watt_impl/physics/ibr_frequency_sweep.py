@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
-os.environ.setdefault("MPLCONFIGDIR", "/tmp/gridpulse-matplotlib")
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/gridtriage-matplotlib")
 import matplotlib
 
 matplotlib.use("Agg")
@@ -101,7 +101,7 @@ def run_2d_sweep(
 
     for pen in penetrations:
         probe = build_wecc_system_at_penetration(pen, require_pflow=True)
-        meta = dict(getattr(probe, "_gridpulse_ibr_meta", {}) or {})
+        meta = dict(getattr(probe, "_gridtriage_ibr_meta", {}) or {})
         del probe
 
         for frequency in frequencies:

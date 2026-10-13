@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GridPulse Physics Tier B environment (Python 3.11 + ANDES 2.0).
+# GridTriage Physics Tier B environment (Python 3.11 + ANDES 2.0).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

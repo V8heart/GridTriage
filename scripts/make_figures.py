@@ -63,7 +63,7 @@ def fig_concept():
     box(ax, 0.1, 0.9, 2.2, 1.9, "GPU 서버\n\nNVML 텔레메트리\n진행 로그\n스케줄러 신고 작업", GREY)
     ax.add_patch(FancyBboxPatch((2.9, 0.35), 4.3, 3.0, boxstyle="round,pad=0.02,rounding_size=0.1",
                                 linewidth=2, edgecolor=BLUE, facecolor="white"))
-    ax.text(5.05, 3.05, "WattTriage", ha="center", fontsize=12, fontweight="bold", color=BLUE)
+    ax.text(5.05, 3.05, "GridTriage", ha="center", fontsize=12, fontweight="bold", color=BLUE)
     for x, text in ((3.12, "① 선별\n정상 기준선\n대비 이상"), (4.47, "② 검색\n위협 지식\n1,091건"),
                     (5.82, "③ 판정·설명\n로컬 LLM\n근거 인용")):
         box(ax, x, 1.85, 1.15, 0.95, text, BLUE, size=8.5)

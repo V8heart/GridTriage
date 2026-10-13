@@ -1,4 +1,4 @@
-"""GridPulse console: real-time view of the v4 pipeline.
+"""GridTriage console: real-time view of the v4 pipeline.
 
     .venv/bin/streamlit run app.py
 
@@ -30,7 +30,7 @@ EXAMPLE_GRID = ROOT / "examples" / "grid" / "pcc_measurement_example.csv"
 VERDICT_COLOR = {"attack": "#d62728", "normal": "#2ca02c", "unobservable": "#7f7f7f",
                  "unknown": "#ff7f0e", "invalid": "#9467bd"}
 
-st.set_page_config(page_title="GridPulse Console", layout="wide")
+st.set_page_config(page_title="GridTriage Console", layout="wide")
 
 
 @st.cache_resource(show_spinner="검색 인덱스와 모델을 불러오는 중")
@@ -50,7 +50,7 @@ def session_table() -> pd.DataFrame:
 
 
 # -- sidebar: source and settings ------------------------------------------
-st.sidebar.title("GridPulse")
+st.sidebar.title("GridTriage")
 mode = st.sidebar.radio("입력", ["Replay (저장 세션)", "Live (NVML)"], index=0 if len(session_table()) else 1)
 llm = st.sidebar.selectbox("판정 LLM", ["gemma3:12b", "deepseek-r1:14b"])
 retrieval = st.sidebar.selectbox("검색 방식", list(MODES), index=list(MODES).index("hybrid_rerank"))
@@ -365,5 +365,5 @@ def dashboard() -> None:
         agent_panel(snap, engine.settings.llm_model)
 
 
-st.title("GridPulse Console")
+st.title("GridTriage Console")
 dashboard()

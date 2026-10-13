@@ -61,7 +61,7 @@ def build_kundur_system() -> Any:
         ss.Toggle.u.v[:] = [0] * len(ss.Toggle)
         disabled_events.append("Toggle")
     ss.setup()
-    ss._gridpulse_disabled_events = disabled_events
+    ss._gridtriage_disabled_events = disabled_events
     _configure_constant_power(ss)
     if not ss.PFlow.run():
         raise RuntimeError("Kundur power flow did not converge")
@@ -81,7 +81,7 @@ def build_wecc_system_at_penetration(
     """Load public WECC 179 GENCLS and optionally replace SGs with REGCA1.
 
     ``penetration`` is capacity fraction (Sn). Replacement happens before setup.
-    Attaches ``_gridpulse_ibr_meta`` on the System for downstream logging.
+    Attaches ``_gridtriage_ibr_meta`` on the System for downstream logging.
     """
     from bit2watt_impl.physics.ibr_penetration import (
         finalize_inertia_meta,
@@ -115,7 +115,7 @@ def build_wecc_system_at_penetration(
         handle = tempfile.NamedTemporaryFile(
             mode="w",
             suffix=".csv",
-            prefix="gridpulse_ppf_",
+            prefix="gridtriage_ppf_",
             delete=False,
             newline="",
         )
@@ -141,16 +141,16 @@ def build_wecc_system_at_penetration(
             dev=pq_idx,
             dests="Ppf",
         )
-        ss._gridpulse_timeseries_injection = True
-        ss._gridpulse_timeseries_pq_idx = pq_idx
+        ss._gridtriage_timeseries_injection = True
+        ss._gridtriage_timeseries_pq_idx = pq_idx
     ss.setup()
     if timeseries_path:
         os.unlink(timeseries_path)
     meta = finalize_inertia_meta(ss, meta)
-    ss._gridpulse_ibr_meta = meta
+    ss._gridtriage_ibr_meta = meta
     _configure_constant_power(ss)
     pflow_ok = bool(ss.PFlow.run())
-    ss._gridpulse_pflow_ok = pflow_ok
+    ss._gridtriage_pflow_ok = pflow_ok
     if require_pflow and not pflow_ok:
         raise RuntimeError(
             f"WECC 179 power flow did not converge at IBR penetration={penetration}"
@@ -400,7 +400,7 @@ def _run_once(
     schedule = build_event_schedule(profile)
     toggle_times = [float(event.time_s) for event in schedule]
 
-    if not getattr(ss, "_gridpulse_timeseries_injection", False):
+    if not getattr(ss, "_gridtriage_timeseries_injection", False):
         for segment_index, event in enumerate(schedule):
             ok, records, reason = run_to(ss, event.time_s, max_chunk_s=max_chunk_s)
             for record in records:
@@ -420,7 +420,7 @@ def _run_once(
                         "criteria": criteria,
                         "tstep_s": tstep_s,
                         "disabled_builtin_events": ",".join(
-                            getattr(ss, "_gridpulse_disabled_events", [])
+                            getattr(ss, "_gridtriage_disabled_events", [])
                         ),
                         "converged": False,
                         "failure_reason": reason,
@@ -452,7 +452,7 @@ def _run_once(
         "criteria": criteria,
         "tstep_s": tstep_s,
         "disabled_builtin_events": ",".join(
-            getattr(ss, "_gridpulse_disabled_events", [])
+            getattr(ss, "_gridtriage_disabled_events", [])
         ),
         "converged": bool(ok),
         "failure_reason": reason,

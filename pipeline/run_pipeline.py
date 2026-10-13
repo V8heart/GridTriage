@@ -1,5 +1,5 @@
 """
-GridPulse 전체 파이프라인 오케스트레이션.
+GridTriage 전체 파이프라인 오케스트레이션.
 
 입력: DCGM/NVML로 수집한 텔레메트리 CSV (timestamp, power_w, util_gpu_pct, ... , label)
 흐름:

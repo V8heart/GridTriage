@@ -1,4 +1,4 @@
-"""합성 파형을 공통 GridPulse 스키마로 변환하는 유틸리티."""
+"""합성 파형을 공통 GridTriage 스키마로 변환하는 유틸리티."""
 from __future__ import annotations
 
 from pathlib import Path

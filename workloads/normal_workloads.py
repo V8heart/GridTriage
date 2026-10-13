@@ -87,7 +87,7 @@ def run(args) -> None:
         if not training and args.mode == "eval_train_switch" and step % 20 == 0:
             log.emit("eval_end", step=step)
         if args.mode == "checkpoint" and step and step % 30 == 0:
-            target_path = Path(args.checkpoint_dir) / "gridpulse-checkpoint.pt"
+            target_path = Path(args.checkpoint_dir) / "gridtriage-checkpoint.pt"
             target_path.parent.mkdir(parents=True, exist_ok=True)
             log.emit("checkpoint_start", step=step)
             torch.save(model.state_dict(), target_path)
@@ -127,7 +127,7 @@ def main() -> None:
     parser.add_argument("--dtype", choices=["bf16", "fp16", "fp32"], default="bf16")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--checkpoint-dir", default="/tmp/gridpulse-checkpoints")
+    parser.add_argument("--checkpoint-dir", default="/tmp/gridtriage-checkpoints")
     parser.add_argument("--progress-log", default=None, help="JSONL progress log path (raw; never deleted)")
     parser.add_argument("--log-every", type=int, default=1, help="emit step_end every k steps")
     run(parser.parse_args())

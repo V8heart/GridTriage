@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GridPulse 가상환경 세팅 (Ubuntu 22.04 / Python 3.10 / CUDA 13.0 / RTX 4090 x2)
+# GridTriage 가상환경 세팅 (Ubuntu 22.04 / Python 3.10 / CUDA 13.0 / RTX 4090 x2)
 # 사용: bash setup_env.sh  그다음  source .venv/bin/activate
 set -e
 

@@ -30,7 +30,7 @@ def test_plan_replacements_deterministic_counts():
 
 def test_replace_zero_keeps_full_inertia():
     ss = build_wecc_system_at_penetration(0.0)
-    meta = ss._gridpulse_ibr_meta
+    meta = ss._gridtriage_ibr_meta
     assert meta["replaced_count"] == 0
     assert meta["achieved_penetration"] == 0.0
     assert meta["inertia_before"] == pytest.approx(8375.75, rel=1e-4)
@@ -39,7 +39,7 @@ def test_replace_zero_keeps_full_inertia():
 
 def test_replace_30pct_reduces_inertia():
     ss = build_wecc_system_at_penetration(0.3)
-    meta = ss._gridpulse_ibr_meta
+    meta = ss._gridtriage_ibr_meta
     assert meta["replaced_count"] == 3
     assert meta["achieved_penetration"] == pytest.approx(0.3199, rel=1e-3)
     assert meta["inertia_after"] == pytest.approx(5697.39, rel=1e-3)

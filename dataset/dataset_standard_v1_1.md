@@ -1,4 +1,4 @@
-# GridPulse 전력 텔레메트리 데이터셋 표준 v1
+# GridTriage 전력 텔레메트리 데이터셋 표준 v1
 
 - 표준 ID: `gp-telemetry/1.1` (v1.0 대비 변경: progress log 정책, §5·§6.1·§11·§12)
 - 적용 대상: 실측(`source=real`)과 합성(`source=synthetic`) **모두**. 합성 생성기도 이 표준을 따른다.

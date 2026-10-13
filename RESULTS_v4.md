@@ -1,4 +1,4 @@
-# GridPulse v4 결과 정리 (2026-10-03)
+# GridTriage v4 결과 정리 (2026-10-03)
 
 계획: [plan_rag_pipeline_v4.md](plan_rag_pipeline_v4.md) · 진단: [plan_real_v3.md](plan_real_v3.md)
 
@@ -237,7 +237,7 @@ arXiv에서 Bit2Watt를 찾아 판정까지 회복하는지 본다. dev 세그�
 | 방식 | 정상 후보율 | 공격 recall |
 |---|---|---|
 | 단순 z-score | 0.535 | 0.938 |
-| GridPulse Stage 1 | **0.116** | 0.596 |
+| GridTriage Stage 1 | **0.116** | 0.596 |
 | 증거 축 제거 | 0.266 | 0.727 |
 | 코호트 기준선 제거(global) | 0.204 | 0.633 |
 | 진행 로그 제거 | 0.116 | 0.596 |

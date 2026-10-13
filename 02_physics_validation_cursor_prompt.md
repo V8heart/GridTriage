@@ -8,14 +8,14 @@
 
 ## 컨텍스트 (Cursor에게 그대로 전달)
 
-우리는 GPU workload 이상탐지 파이프라인(GridPulse)의 Physical Threat Potential Score가
+우리는 GPU workload 이상탐지 파이프라인(GridTriage)의 Physical Threat Potential Score가
 지금은 근거 없는 가중합이라는 문제를 갖고 있다. 이를 실증적으로 보정하기 위해
 공개 동적 전력계통 테스트케이스(Kundur 2-area, 이후 WECC 179)에 우리 공격 파형을
 주입해서 실제 발전기 진동·주파수 응답을 관측하는 Tier B 검증 레이어를 만든다.
 
 **절대 하지 말 것**: "한국 실제 전력망에서 이 공격이 발생하면 X Hz 떨어진다"는 주장.
 우리가 쓰는 계통은 공개 표준 테스트케이스이지 한국 계통의 실제 동적 파라미터가 아니다.
-표현은 항상 "GridPulse가 고위험으로 분류한 workload 패턴이 공개 동적 테스트 계통에서
+표현은 항상 "GridTriage가 고위험으로 분류한 workload 패턴이 공개 동적 테스트 계통에서
 유의미하게 큰 물리적 응답을 유발하는지 검증했다"로 한정한다.
 
 첨부한 `stage1_kundur_scaffold.py`를 반드시 먼저 읽고, 아래 3개 함정을 이해한 뒤 작업을 시작해줘:
@@ -65,7 +65,7 @@
 8. Kundur와 같은 경향(공격 주파수가 계통 고유모드에 가까울수록 응답 증폭)이
    더 큰 계통에서도 재현되는지 비교해줘.
 
-## Phase 4 — GridPulse 연결
+## Phase 4 — GridTriage 연결
 
 9. `pipeline/run_pipeline.py`의 출력(anomaly score, threat_id, RAG 매칭 결과)과
    physics layer의 출력(rocof_hz_s, osc_std)을 attack_id 기준으로 join하는

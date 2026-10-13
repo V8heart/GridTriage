@@ -1,4 +1,4 @@
-# GridPulse main environment (.venv) — Python 3.10, versions as validated on the reference server
+# GridTriage main environment (.venv) — Python 3.10, versions as validated on the reference server
 # (Ubuntu 22.04, CUDA 13.0, RTX 4090 x2). Physics (ANDES) uses a separate Python 3.11 env:
 # requirements-physics.txt / setup_physics_env.sh.
 #

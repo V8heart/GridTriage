@@ -14,7 +14,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
 
-UA = "GridPulse-research/0.1 (curated threat research; contact: local)"
+UA = "GridTriage-research/0.1 (curated threat research; contact: local)"
 ATOM = {"a": "http://www.w3.org/2005/Atom"}
 
 

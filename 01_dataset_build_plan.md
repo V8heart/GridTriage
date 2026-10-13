@@ -1,4 +1,4 @@
-# GridPulse(KDN repo) 1단계 — 데이터셋 구축 계획
+# GridTriage(KDN repo) 1단계 — 데이터셋 구축 계획
 
 > 대상 저장소: https://github.com/V8heart/KDN
 > 목적: 이 문서를 그대로 Cursor 프롬프트로 사용해 데이터셋 구축 단계를 진행한다.
@@ -159,7 +159,7 @@ KDN/
 > 아래 블록만 복사해서 Cursor에 붙여넣으면 됨.
 
 ```
-이 리포(V8heart/KDN, GridPulse 파이프라인)의 1단계 데이터셋 구축을 진행해줘.
+이 리포(V8heart/KDN, GridTriage 파이프라인)의 1단계 데이터셋 구축을 진행해줘.
 
 컨텍스트:
 - 현재 data.csv는 timestamp, power_w, util_gpu_pct, label(normal/swma) 뿐이고,

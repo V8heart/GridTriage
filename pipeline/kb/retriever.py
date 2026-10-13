@@ -9,7 +9,8 @@ Modes (for ablation):
 
 Scores rank documents for the LLM; they are not attack probabilities.
 Models run on a dedicated pipeline GPU (assumed separate from the monitored
-GPUs): GRIDPULSE_RETRIEVER_DEVICE, else the last CUDA device, else CPU.
+GPUs): GRIDTRIAGE_RETRIEVER_DEVICE (old name GRIDPULSE_RETRIEVER_DEVICE still read), else the last
+CUDA device, else CPU.
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ TOKEN = re.compile(r"[a-z0-9]+(?:\.[0-9]+)?|[가-힣]+")
 
 
 def default_device() -> str:
-    env = os.environ.get("GRIDPULSE_RETRIEVER_DEVICE")
+    env = os.environ.get("GRIDTRIAGE_RETRIEVER_DEVICE") or os.environ.get("GRIDPULSE_RETRIEVER_DEVICE")
     if env:
         return env
     try:

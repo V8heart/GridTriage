@@ -1,4 +1,4 @@
-"""WattTriage console v2: one-screen layout of the same v4 pipeline as app.py.
+"""GridTriage console v2: one-screen layout of the same v4 pipeline as app.py.
 
     .venv/bin/streamlit run app_v2.py
 
@@ -42,7 +42,7 @@ SYSTEM_NAME = {"wecc": "WECC 179-bus", "kundur_ieeest": "Kundur 2-area"}
 EMPTY = {"rows": {}, "windows": [], "analyses": [], "physics": {}, "pending": 0, "pending_alarms": {},
          "run_len": {}, "trigger_windows": 5, "error": None, "source": "", "stage1": ""}
 
-st.set_page_config(page_title="WattTriage Console", layout="wide")
+st.set_page_config(page_title="GridTriage Console", layout="wide")
 st.markdown("""
 <style>
 .block-container {padding-top: 2.6rem; padding-bottom: 1rem; max-width: 100%;}
@@ -100,7 +100,7 @@ def session_table() -> pd.DataFrame:
 
 
 # -- sidebar: same inputs as app.py ------------------------------------------
-st.sidebar.title("WattTriage")
+st.sidebar.title("GridTriage")
 mode = st.sidebar.radio("입력", ["Replay (저장 세션)", "Live (NVML)"], index=0 if len(session_table()) else 1)
 llm = st.sidebar.selectbox("판정 LLM", ["gemma3:12b", "deepseek-r1:14b", "claude-opus-5-5"])
 retrieval = st.sidebar.selectbox("검색 방식", list(MODES), index=list(MODES).index("hybrid_rerank"))
@@ -215,7 +215,7 @@ def status_bar(snap: dict, engine: LiveEngine | None) -> None:
         chips.append(f"입력 <b>{escape(str(snap['source']))}</b>")
     if obs:
         chips.append(f"판정 가능 대역 <b>≤ {obs['nyquist_hz']:.1f} Hz</b> · 갱신 {obs['refresh_ms']:.0f} ms")
-    st.markdown("<div class='gp-bar'><span class='gp-title'>WattTriage Console</span>"
+    st.markdown("<div class='gp-bar'><span class='gp-title'>GridTriage Console</span>"
                 + "".join(f"<span class='gp-chip'>{c}</span>" for c in chips) + "</div>", unsafe_allow_html=True)
     if snap["error"]:
         st.error(snap["error"])

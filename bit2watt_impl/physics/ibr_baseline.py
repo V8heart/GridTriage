@@ -51,7 +51,7 @@ def evaluate_penetration(
         row["excluded_reason"] = row["failure_reason"]
         return row
 
-    meta = getattr(ss, "_gridpulse_ibr_meta", {}) or {}
+    meta = getattr(ss, "_gridtriage_ibr_meta", {}) or {}
     row.update(
         {
             "achieved_penetration": meta.get("achieved_penetration"),
@@ -62,7 +62,7 @@ def evaluate_penetration(
             "replaced_idx": ",".join(meta.get("replaced_idx") or []),
         }
     )
-    pflow_ok = bool(getattr(ss, "_gridpulse_pflow_ok", False))
+    pflow_ok = bool(getattr(ss, "_gridtriage_pflow_ok", False))
     row["pflow_ok"] = pflow_ok
     if not pflow_ok:
         row["failure_reason"] = "power flow did not converge"
